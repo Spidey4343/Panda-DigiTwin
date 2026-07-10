@@ -152,6 +152,27 @@ body {
 
 .clock { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--sub); white-space: nowrap; }
 
+/* ── Copy-link toast (visible confirmation for the share button,
+   since the icon-only button + title-tooltip alone were easy to miss) ── */
+.copy-toast {
+  position: fixed;
+  transform: translate(-50%, -6px);
+  background: #14161f;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  padding: 7px 12px;
+  border-radius: 20px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 9999;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.copy-toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
 /* ── Main layout ─────────────────────────────────────────── */
 .main {
   flex: 1;

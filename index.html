@@ -490,15 +490,36 @@ window.addEventListener('load', () => {
     termLog('HOME executed', 'ok');
   });
 
-  // Share link — copies the current page URL to the clipboard
+  // Share link — copies the current page URL to the clipboard.
+  // The .copied color change alone was easy to miss (icon-only button,
+  // no visible label), so a floating toast now confirms the copy too.
+  function showCopyToast(anchorEl, text) {
+    let toast = document.getElementById('copyToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'copyToast';
+      toast.className = 'copy-toast';
+      document.body.appendChild(toast);
+    }
+    const r = anchorEl.getBoundingClientRect();
+    toast.textContent = text;
+    toast.style.left = (r.left + r.width / 2) + 'px';
+    toast.style.top = (r.bottom + 10) + 'px';
+    toast.classList.add('visible');
+    clearTimeout(toast._hideTimer);
+    toast._hideTimer = setTimeout(() => toast.classList.remove('visible'), 1600);
+  }
+
   document.getElementById('shareLink').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     try {
       await navigator.clipboard.writeText(window.location.href);
       btn.classList.add('copied');
       btn.title = 'Link copied!';
+      showCopyToast(btn, '✓ Link copied to clipboard');
       setTimeout(() => { btn.classList.remove('copied'); btn.title = 'Copy shareable link'; }, 1500);
     } catch (err) {
+      showCopyToast(btn, 'Copy failed — see prompt');
       window.prompt('Copy this link:', window.location.href);
     }
   });
