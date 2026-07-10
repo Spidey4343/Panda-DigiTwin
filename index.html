@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FR3 Digital Twin — PFH</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="https://create3000.github.io/code/x_ite/latest/x_ite.css"/>
+  <script src="https://create3000.github.io/code/x_ite/latest/x_ite.min.js"></script>
+  <script src="pandaIK.js"></script>
+  <script src="pandaSafety.js"></script>
+  <script src="pandaSliders.js"></script>
+  <script src="pandaKRL.js"></script>
+  <link rel="stylesheet" href="style.css"/>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     APP SHELL
+═══════════════════════════════════════════════════ -->
+<div class="shell">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">
+        <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+          <circle cx="11" cy="11" r="10" stroke="currentColor" stroke-width="1.5"/>
+          <circle cx="11" cy="11" r="4" fill="currentColor"/>
+          <line x1="11" y1="1" x2="11" y2="5" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="11" y1="17" x2="11" y2="21" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="1" y1="11" x2="5" y2="11" stroke="currentColor" stroke-width="1.5"/>
+          <line x1="17" y1="11" x2="21" y2="11" stroke="currentColor" stroke-width="1.5"/>
+        </svg>
+      </div>
+      <div>
+        <div class="header-title">Franka Research 3</div>
+        <div class="header-sub">Digital Twin — PFH Hansecampus Stade</div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="tcp-bar">
+        <span class="tcp-label">TCP</span>
+        <span id="tcpX" class="tcp-val">—</span>
+        <span class="tcp-unit">X</span>
+        <span id="tcpY" class="tcp-val">—</span>
+        <span class="tcp-unit">Y</span>
+        <span id="tcpZ" class="tcp-val">—</span>
+        <span class="tcp-unit">Z mm</span>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <span class="badge">7-DOF</span>
+      <span class="badge badge-green" id="connBadge">● X_ITE</span>
+      <button class="btn-icon" id="resetJoints" title="Reset to home">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+        Home
+      </button>
+      <button class="btn-icon icon-only" id="shareLink" title="Copy shareable link">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="18" cy="5" r="3"/>
+          <circle cx="6" cy="12" r="3"/>
+          <circle cx="18" cy="19" r="3"/>
+          <line x1="8.6" y1="10.6" x2="15.4" y2="6.4"/>
+          <line x1="8.6" y1="13.4" x2="15.4" y2="17.6"/>
+        </svg>
+      </button>
+      <div class="clock" id="clock"></div>
+    </div>
+  </header>
+
+  <!-- MAIN -->
+  <div class="main">
+
+    <!-- 3D VIEWPORT -->
+    <div class="viewport">
+      <x3d-canvas id="x3dCanvas" src="panda.wrl" update="auto" timings="false"></x3d-canvas>
+
+      <!-- View controls -->
+      <div class="view-controls">
+        <button class="view-btn" onclick="gotoView('FrontView')">Front</button>
+        <button class="view-btn" onclick="gotoView('SideView')">Side</button>
+        <button class="view-btn" onclick="gotoView('TopView')">Top</button>
+        <button class="view-btn" onclick="gotoView('IsometricView')">Iso</button>
+      </div>
+
+      <!-- Info chip -->
+      <div class="viewport-chip">FR3 · Reach 855 mm · Payload 3 kg</div>
+
+      <!-- Hover tooltip -->
+      <div id="link-tooltip-overlay"></div>
+    </div>
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+
+      <!-- TAB BAR -->
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="motion">Motion</button>
+        <button class="tab-btn" data-tab="program">Program</button>
+        <button class="tab-btn" data-tab="console">Console</button>
+      </div>
+
+      <div class="tab-panels">
+
+      <!-- ═══ MOTION TAB: sliders, IK, stored positions ═══ -->
+      <div class="tab-panel" data-tab-panel="motion">
+
+        <!-- JOINTS SECTION -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Joint Controls</span>
+            <span class="panel-tag">7 axes</span>
+          </div>
+          <div id="slider-list"></div>
+        </section>
+
+        <!-- IK SECTION -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Inverse Kinematics</span>
+            <span class="panel-tag ik-tag">Jacobian</span>
+          </div>
+
+          <div class="ik-grid">
+            <div class="ik-field">
+              <label class="field-label">X <span class="field-unit">mm</span></label>
+              <input class="field-input" type="number" id="X" value="0" step="5"/>
+            </div>
+            <div class="ik-field">
+              <label class="field-label">Y <span class="field-unit">mm</span></label>
+              <input class="field-input" type="number" id="Y" value="0" step="5"/>
+            </div>
+            <div class="ik-field">
+              <label class="field-label">Z <span class="field-unit">mm</span></label>
+              <input class="field-input" type="number" id="Z" value="400" step="5"/>
+            </div>
+          </div>
+
+          <div class="ik-actions">
+            <button class="btn-primary" id="moveToPose">Solve IK</button>
+            <button class="btn-secondary" id="getCurrentTCP">Get TCP</button>
+          </div>
+
+          <!-- Orientation -->
+          <div class="orient-row">
+            <select class="select-sm" id="orientation">
+              <option value="RPY">RPY</option>
+              <option value="XYZ">XYZ</option>
+            </select>
+            <input class="field-input sm" type="number" id="O1" value="0" placeholder="R"/>
+            <input class="field-input sm" type="number" id="O2" value="0" placeholder="P"/>
+            <input class="field-input sm" type="number" id="O3" value="0" placeholder="Y"/>
+            <button class="btn-secondary sm" id="setOrientation">Apply</button>
+          </div>
+
+          <div id="status" class="status-msg">Ready</div>
+        </section>
+
+        <!-- STORED POSITIONS -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Stored Positions</span>
+          </div>
+
+          <div class="config-row">
+            <input class="field-input" type="text" id="configName" placeholder="Position name…"/>
+            <button class="btn-secondary" id="saveNamedConfig">Save</button>
+          </div>
+
+          <div class="config-row">
+            <select class="select-sm flex1" id="configSelect">
+              <option value="">— Select —</option>
+            </select>
+            <button class="btn-secondary" id="loadNamedConfig">Load</button>
+            <button class="btn-danger-sm" id="deleteConfig">✕</button>
+          </div>
+
+          <div class="btn-row">
+            <button class="btn-ghost" id="saveConfig">💾 Save</button>
+            <button class="btn-ghost" id="loadConfig">📂 Restore</button>
+            <button class="btn-ghost" id="exportJSON">⬇ JSON</button>
+            <button class="btn-ghost" id="importJSON">⬆ Import</button>
+          </div>
+          <input type="file" id="fileInput" accept=".json" style="display:none"/>
+        </section>
+
+      </div>
+
+      <!-- ═══ PROGRAM TAB: KRL editor, variables, I/O ═══ -->
+      <div class="tab-panel" data-tab-panel="program" hidden>
+
+        <!-- PROGRAM EDITOR -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Program Editor</span>
+            <span class="panel-tag new-tag">NEW · KRL</span>
+          </div>
+          <textarea class="krl-editor" id="krlProgram" spellcheck="false">DECL INT i = 0
+WHILE i < 3
+  LIN {X 300 Y 0 Z 500}
+  WAIT 300
+  i = i + 1
+ENDWHILE
+HOME</textarea>
+          <div class="krl-editor-actions">
+            <button class="btn-primary sm" id="runProgram">▶ Run Program</button>
+            <button class="btn-secondary sm" id="stopProgram">■ Stop</button>
+          </div>
+          <div class="terminal-history" id="progHistory"></div>
+        </section>
+
+        <!-- VARIABLES -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Variables</span>
+            <span class="panel-tag new-tag">NEW · live</span>
+          </div>
+          <div class="var-table" id="varTable">
+            <div class="var-row var-row-head">
+              <span>Name</span><span>Type</span><span>Value</span>
+            </div>
+            <div class="var-empty" id="varEmpty">No variables declared yet</div>
+          </div>
+        </section>
+
+        <!-- I/O SIGNALS -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">I/O Signals</span>
+            <span class="panel-tag new-tag">NEW · $IN / $OUT</span>
+          </div>
+          <div class="io-row">
+            <span class="io-label">$IN</span>
+            <div class="io-chips" id="ioInChips"></div>
+          </div>
+          <div class="io-row">
+            <span class="io-label">$OUT</span>
+            <div class="io-chips" id="ioOutChips"></div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- ═══ CONSOLE TAB: quick KRL terminal ═══ -->
+      <div class="tab-panel" data-tab-panel="console" hidden>
+
+        <!-- KRL TERMINAL -->
+        <section class="panel">
+          <div class="panel-header">
+            <span class="panel-title">KRL Terminal</span>
+            <span class="panel-tag">quick commands</span>
+          </div>
+          <div class="terminal-history" id="termHistory"></div>
+          <div class="terminal-input-row">
+            <input class="terminal-input" type="text" id="command" placeholder="LIN {X 300 Y 0 Z 500}"/>
+            <button class="btn-primary sm" id="execute">Run</button>
+          </div>
+          <div class="terminal-hints">
+            <span onclick="fillCmd('LIN {X 300 Y 0 Z 500}')">LIN</span>
+            <span onclick="fillCmd('HOME')">HOME</span>
+            <span onclick="fillCmd('PTP {A1 0 A2 -45 A3 0 A4 -135 A5 0 A6 90 A7 45}')">PTP</span>
+            <span onclick="fillCmd('WAIT 500')">WAIT</span>
+            <span onclick="fillCmd('\$OUT[1] = TRUE')">$OUT</span>
+          </div>
+        </section>
+
+      </div>
+
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+// ── Clock ─────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) + ' · ' +
+    now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// ── Sidebar tabs (Motion / Program / Console) ───────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.hidden = true);
+    btn.classList.add('active');
+    document.querySelector(`.tab-panel[data-tab-panel="${btn.dataset.tab}"]`).hidden = false;
+  });
+});
+
+// ── Viewpoint ─────────────────────────────────────────────────
+function gotoView(name) {
+  try {
+    // 'x3dCanvas' alone isn't a valid CSS selector for getBrowser (it needs
+    // '#x3dCanvas', or no argument at all) — that was making this call
+    // return undefined and silently fail on every click.
+    const b = X3D.getBrowser('#x3dCanvas') || X3D.getBrowser();
+    if (!b || !b.currentScene) { console.warn('[FR3] view: browser/scene not ready'); return; }
+    const v = b.currentScene.getNamedNode(name);
+    // browser.setBind(...) isn't a real X_ITE/X3D API — bindable nodes
+    // (Viewpoint, NavigationInfo, etc.) are bound by setting their own
+    // set_bind eventIn to true, not through a browser-level method.
+    if (v) v.set_bind = true;
+    else console.warn(`[FR3] view: named viewpoint "${name}" not found`);
+  } catch(e) { console.warn('[FR3] gotoView failed:', e); }
+}
+
+// ── Terminal helpers ──────────────────────────────────────────
+function fillCmd(txt) {
+  document.getElementById('command').value = txt;
+  document.getElementById('command').focus();
+}
+
+function termLog(msg, type) {
+  const h = document.getElementById('termHistory');
+  const line = document.createElement('div');
+  line.className = 'term-line ' + (type || '');
+  line.textContent = '> ' + msg;
+  h.appendChild(line);
+  h.scrollTop = h.scrollHeight;
+  // Keep max 20 lines
+  while (h.children.length > 20) h.removeChild(h.firstChild);
+}
+
+// ── Status helper ─────────────────────────────────────────────
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-msg ' + (type || '');
+}
+
+// ── TCP display ───────────────────────────────────────────────
+function updateTCPDisplay(tcp) {
+  if (!tcp) return;
+  document.getElementById('tcpX').textContent = tcp[0].toFixed(0);
+  document.getElementById('tcpY').textContent = tcp[1].toFixed(0);
+  document.getElementById('tcpZ').textContent = tcp[2].toFixed(0);
+}
+
+// ── KRL execution (routed through the real Parser → IR → Dispatcher →
+//    Interpreter pipeline in pandaKRL.js, instead of ad-hoc regex matching) ──
+async function parseKRL(cmd) {
+  if (!cmd.trim()) return;
+  termLog(cmd, 'cmd');
+  try {
+    const ir = KRLEngine.parseProgram(cmd);
+    await KRLEngine.KRLInterpreter.run(ir, {
+      backend: KRLEngine.getBackend(),
+      log: termLog,
+      homeAngles: () => PandaSliderControl.getHomeAngles(),
+      onScopeChange: refreshVariablesPanel,
+    });
+  } catch (e) {
+    termLog('Parse error: ' + e.message, 'err');
+  }
+}
+
+function progLog(msg, type) {
+  const h = document.getElementById('progHistory');
+  if (!h) return;
+  const line = document.createElement('div');
+  line.className = 'term-line ' + (type || '');
+  line.textContent = '> ' + msg;
+  h.appendChild(line);
+  h.scrollTop = h.scrollHeight;
+  while (h.children.length > 40) h.removeChild(h.firstChild);
+}
+
+async function runKRLProgram() {
+  if (KRLEngine.KRLInterpreter.isRunning()) { progLog('Already running — Stop it first', 'warn'); return; }
+  document.getElementById('progHistory').innerHTML = '';
+  const text = document.getElementById('krlProgram').value;
+  try {
+    const ir = KRLEngine.parseProgram(text);
+    await KRLEngine.KRLInterpreter.run(ir, {
+      backend: KRLEngine.getBackend(),
+      log: progLog,
+      homeAngles: () => PandaSliderControl.getHomeAngles(),
+      onScopeChange: refreshVariablesPanel,
+    });
+  } catch (e) {
+    progLog('Parse error: ' + e.message, 'err');
+  }
+}
+
+// ── Variables panel ──────────────────────────────────────────
+function refreshVariablesPanel() {
+  const scope = KRLEngine.KRLInterpreter.getScope();
+  const table = document.getElementById('varTable');
+  const empty = document.getElementById('varEmpty');
+  table.querySelectorAll('.var-row:not(.var-row-head)').forEach(r => r.remove());
+  const names = Object.keys(scope.vars);
+  if (!names.length) { empty.style.display = 'block'; return; }
+  empty.style.display = 'none';
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'var-row';
+    const nameEl = document.createElement('span'); nameEl.className = 'v-name'; nameEl.textContent = name;
+    const typeEl = document.createElement('span'); typeEl.className = 'v-type'; typeEl.textContent = scope.types[name] || '';
+    const valEl  = document.createElement('span'); valEl.className = 'v-val';  valEl.textContent = String(scope.vars[name]);
+    row.append(nameEl, typeEl, valEl);
+    table.appendChild(row);
+  });
+}
+
+// ── I/O Signals panel ────────────────────────────────────────
+function buildIOChips() {
+  const inWrap = document.getElementById('ioInChips');
+  const outWrap = document.getElementById('ioOutChips');
+  for (let i = 1; i <= 8; i++) {
+    const inChip = document.createElement('div');
+    inChip.className = 'io-chip in';
+    inChip.id = 'ioIn' + i;
+    inChip.textContent = i;
+    inChip.title = `Toggle $IN[${i}]`;
+    inChip.onclick = () => {
+      const scope = KRLEngine.KRLInterpreter.getScope();
+      const newVal = !scope.IN[i];
+      KRLEngine.KRLInterpreter.setInput(i, newVal);
+      inChip.classList.toggle('on', newVal);
+    };
+    inWrap.appendChild(inChip);
+
+    const outChip = document.createElement('div');
+    outChip.className = 'io-chip out';
+    outChip.id = 'ioOut' + i;
+    outChip.textContent = i;
+    outChip.title = `$OUT[${i}] (set from KRL programs)`;
+    outWrap.appendChild(outChip);
+  }
+}
+
+window.onKRLOutputChange = (index, value) => {
+  const el = document.getElementById('ioOut' + index);
+  if (el) el.classList.toggle('on', !!value);
+};
+
+// ── Main init ─────────────────────────────────────────────────
+window.addEventListener('load', () => {
+
+  // Build sliders
+  PandaSliderControl.init('slider-list');
+
+  // Init IK
+  setTimeout(() => {
+    if (typeof IKController !== 'undefined') {
+      IKController.init();
+      IKController.addSliderListener();
+      // Live TCP update
+      setInterval(() => {
+        if (typeof PandaIK !== 'undefined') {
+          const angles = PandaSliderControl.getAllAngles();
+          const rad    = PandaSliderControl.JOINT_CONFIG.map(c =>
+            (angles[c.name] || c.init) * PandaIK.DEG
+          );
+          try {
+            const tcp = PandaIK.getTCP(rad);
+            updateTCPDisplay(tcp);
+          } catch(e) {}
+        }
+      }, 150);
+    }
+  }, 800);
+
+  // Coord validation
+  [['X',-855,855],['Y',-855,855],['Z',-360,1200]].forEach(([id,lo,hi]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', () => {
+      el.classList.toggle('field-error', parseFloat(el.value) < lo || parseFloat(el.value) > hi);
+    });
+  });
+
+  // Reset
+  document.getElementById('resetJoints').addEventListener('click', () => {
+    PandaSliderControl.loadAllAngles(PandaSliderControl.getHomeAngles(), true);
+    setStatus('Moved to home', 'ok');
+    termLog('HOME executed', 'ok');
+  });
+
+  // Share link — copies the current page URL to the clipboard
+  document.getElementById('shareLink').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      btn.classList.add('copied');
+      btn.title = 'Link copied!';
+      setTimeout(() => { btn.classList.remove('copied'); btn.title = 'Copy shareable link'; }, 1500);
+    } catch (err) {
+      window.prompt('Copy this link:', window.location.href);
+    }
+  });
+
+  // Config management
+  function refreshList() {
+    const sel = document.getElementById('configSelect');
+    sel.innerHTML = '<option value="">— Select —</option>';
+    PandaSliderControl.getConfigList().forEach(n => {
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      sel.appendChild(o);
+    });
+  }
+
+  document.getElementById('saveNamedConfig').onclick = () => {
+    const n = document.getElementById('configName').value.trim();
+    if (PandaSliderControl.saveNamedConfig(n)) { refreshList(); setStatus('Saved: '+n,'ok'); }
+  };
+  document.getElementById('loadNamedConfig').onclick = () => {
+    const n = document.getElementById('configSelect').value;
+    if (PandaSliderControl.loadNamedConfig(n,true)) setStatus('Loaded: '+n,'ok');
+  };
+  document.getElementById('deleteConfig').onclick = () => {
+    const n = document.getElementById('configSelect').value;
+    if (n && PandaSliderControl.deleteNamedConfig(n)) { refreshList(); setStatus('Deleted',''); }
+  };
+  document.getElementById('saveConfig').onclick = () => {
+    PandaSliderControl.saveToLocalStorage(); setStatus('Saved to browser','ok');
+  };
+  document.getElementById('loadConfig').onclick = () => {
+    PandaSliderControl.loadFromLocalStorage(true); setStatus('Restored','ok');
+  };
+  document.getElementById('exportJSON').onclick = () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([PandaSliderControl.exportAsJSON()],{type:'application/json'}));
+    a.download = 'fr3_config.json'; a.click();
+    setStatus('Exported','ok');
+  };
+  document.getElementById('importJSON').onclick = () => document.getElementById('fileInput').click();
+  document.getElementById('fileInput').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = ev => {
+      if (PandaSliderControl.importFromJSON(ev.target.result)) setStatus('Imported: '+f.name,'ok');
+      else setStatus('Import failed','err');
+    };
+    r.readAsText(f);
+  };
+
+  // KRL
+  document.getElementById('execute').onclick = () => {
+    parseKRL(document.getElementById('command').value);
+    document.getElementById('command').value = '';
+  };
+  document.getElementById('command').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('execute').click();
+  });
+
+  // IK buttons
+  document.getElementById('getCurrentTCP').onclick = () => {
+    if (typeof PandaIK !== 'undefined') {
+      const angles = PandaSliderControl.getAllAngles();
+      const rad    = PandaSliderControl.JOINT_CONFIG.map(c =>
+        (angles[c.name] || c.init) * PandaIK.DEG
+      );
+      const tcp = PandaIK.getTCP(rad);
+      document.getElementById('X').value = tcp[0].toFixed(1);
+      document.getElementById('Y').value = tcp[1].toFixed(1);
+      document.getElementById('Z').value = tcp[2].toFixed(1);
+      updateTCPDisplay(tcp);
+      setStatus(`TCP: [${tcp[0].toFixed(0)}, ${tcp[1].toFixed(0)}, ${tcp[2].toFixed(0)}]`,'ok');
+    }
+  };
+
+  // Program Editor (multi-line KRL: DECL/IF/WHILE/WAIT/$OUT/motion)
+  document.getElementById('runProgram').onclick = runKRLProgram;
+  document.getElementById('stopProgram').onclick = () => {
+    KRLEngine.KRLInterpreter.stop();
+    progLog('Stop requested', 'warn');
+  };
+
+  // Variables + I/O panels
+  buildIOChips();
+  refreshVariablesPanel();
+  setInterval(refreshVariablesPanel, 400);
+
+  refreshList();
+  termLog('FR3 Digital Twin ready', 'ok');
+  progLog('Program editor ready — write KRL and hit Run', 'ok');
+});
+</script>
+</body>
+</html>

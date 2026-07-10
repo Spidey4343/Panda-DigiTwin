@@ -1,0 +1,186 @@
+#VRML V2.0 utf8
+
+# ================================================================
+# Franka Research 3 (FR3) — 7-DOF Digital Twin
+# PFH DigiTwin Project — Rohan Pagadakula
+#
+# Joint chain matches pandaIK.js CHAIN exactly:
+#   T = T * Translate(tx,ty,tz) * RotateX(roll) * RotateZ(q)
+# Each joint below = outer fixed-roll Transform (RotateX) wrapping
+# an inner DEF jointN Transform that only carries the animated
+# Z-axis rotation (the one the sliders/IK write to).
+# ================================================================
+
+Background { skyColor [ 0.05 0.06 0.10 ] }
+
+DirectionalLight { direction -0.5 -1.0 -0.5 intensity 0.9 ambientIntensity 0.35 }
+DirectionalLight { direction  0.5 -0.5  0.5 intensity 0.5 color 0.85 0.92 1.0 }
+
+Transform {
+  translation 0 0 -5
+  children [
+    Shape {
+      appearance Appearance {
+        material Material {
+          diffuseColor 0.08 0.08 0.12
+          transparency 0.3
+        }
+      }
+      geometry Box { size 2200 2200 2 }
+    }
+  ]
+}
+
+Transform {
+  translation 0 0 0
+  children [
+    Inline { url ["meshes/link0.wrl"] }
+    DEF Base TouchSensor { description "Base | Franka Research 3" }
+
+    # ---- joint1: tz=333, roll=0 ----
+    Transform {
+      translation 0 0 333
+      rotation 1 0 0 0
+      children [
+        DEF joint1 Transform {
+          rotation 0 0 1 0
+          children [
+            Inline { url ["meshes/link1.wrl"] }
+            DEF TS1 TouchSensor { description "J1" }
+
+            # ---- joint2: tz=0, roll=-90 ----
+            Transform {
+              translation 0 0 0
+              rotation 1 0 0 -1.5708
+              children [
+                DEF joint2 Transform {
+                  rotation 0 0 1 0
+                  children [
+                    Inline { url ["meshes/link2.wrl"] }
+                    DEF TS2 TouchSensor { description "J2" }
+
+                    # ---- joint3: ty=-316, roll=+90 ----
+                    Transform {
+                      translation 0 -316 0
+                      rotation 1 0 0 1.5708
+                      children [
+                        DEF joint3 Transform {
+                          rotation 0 0 1 0
+                          children [
+                            Inline { url ["meshes/link3.wrl"] }
+                            DEF TS3 TouchSensor { description "J3" }
+
+                            # ---- joint4: tx=82.5, roll=+90 ----
+                            Transform {
+                              translation 82.5 0 0
+                              rotation 1 0 0 1.5708
+                              children [
+                                DEF joint4 Transform {
+                                  rotation 0 0 1 0
+                                  children [
+                                    Inline { url ["meshes/link4.wrl"] }
+                                    DEF TS4 TouchSensor { description "J4" }
+
+                                    # ---- joint5: tx=-82.5, ty=384, roll=-90 ----
+                                    Transform {
+                                      translation -82.5 384 0
+                                      rotation 1 0 0 -1.5708
+                                      children [
+                                        DEF joint5 Transform {
+                                          rotation 0 0 1 0
+                                          children [
+                                            Inline { url ["meshes/link5.wrl"] }
+                                            DEF TS5 TouchSensor { description "J5" }
+
+                                            # ---- joint6: tz=0, roll=+90 ----
+                                            Transform {
+                                              translation 0 0 0
+                                              rotation 1 0 0 1.5708
+                                              children [
+                                                DEF joint6 Transform {
+                                                  rotation 0 0 1 0
+                                                  children [
+                                                    Inline { url ["meshes/link6.wrl"] }
+                                                    DEF TS6 TouchSensor { description "J6" }
+
+                                                    # ---- joint7: tx=88, roll=+90 ----
+                                                    Transform {
+                                                      translation 88 0 0
+                                                      rotation 1 0 0 1.5708
+                                                      children [
+                                                        DEF joint7 Transform {
+                                                          rotation 0 0 1 0
+                                                          children [
+                                                            Inline { url ["meshes/link7.wrl"] }
+                                                            DEF TS7 TouchSensor { description "J7" }
+
+                                                            Transform {
+                                                              translation 0 0 107
+                                                              children [
+                                                                Shape {
+                                                                  appearance Appearance {
+                                                                    material Material {
+                                                                      diffuseColor  0.0 0.85 0.45
+                                                                      emissiveColor 0.0 0.40 0.20
+                                                                      transparency  0.15
+                                                                    }
+                                                                  }
+                                                                  geometry Sphere { radius 10 }
+                                                                }
+                                                              ]
+                                                            }
+                                                          ]
+                                                        }
+                                                      ]
+                                                    }
+                                                  ]
+                                                }
+                                              ]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+DEF FrontView Viewpoint {
+  description "Front"
+  position     0 -1800 700
+  orientation  1 0 0 1.39
+  fieldOfView  0.65
+}
+DEF SideView Viewpoint {
+  description "Side"
+  position     1800 0 700
+  orientation  0.5 0.5 0.5 2.094
+  fieldOfView  0.65
+}
+DEF TopView Viewpoint {
+  description "Top"
+  position     0 80 2000
+  orientation  1 0 0 0
+  fieldOfView  0.65
+}
+DEF IsometricView Viewpoint {
+  description "Iso"
+  position     1200 -1200 900
+  orientation  0.5 0.3 0.8 1.1
+  fieldOfView  0.60
+}
