@@ -342,11 +342,15 @@ Group {
     # it's derived by rotating SideView's camera position+orientation 90°
     # about Z, so it looks at the robot from a perpendicular horizontal angle.
     # ========================================================================
+    # Mirrors panda.wrl's FrontView geometry exactly (same distance/tilt/FOV),
+    # just re-centered in Z by -400 to match this robot's root Transform
+    # offset (see "translation 0 0 -400" below) so the default framing on
+    # load looks the same relative distance/height as the FR3 scene's.
     DEF FrontView Viewpoint {
       description "Front View"
-      position 1815 100 5
-      orientation -0.014 1.0 -0.013 1.5478
-      fieldOfView 0.6
+      position 0 -1800 300
+      orientation 1 0 0 1.39
+      fieldOfView 0.65
     }
 
     DEF SideView Viewpoint {
