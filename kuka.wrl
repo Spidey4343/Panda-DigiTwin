@@ -305,7 +305,7 @@ PROTO CollisionSensor [
 #   A_base: 0 0 0
 #   A1:     0 0 187.2    (Base swivel - Z-axis rotation)
 #   A2:     0 0 140.9    (Shoulder - Y-axis rotation, HOME=-90°)
-#   A3:     0 0 289.6    (Elbow - Y-axis rotation, HOME=+90°)
+#   A3:     0 0 289.6    (Elbow - Y-axis rotation, HOME=+65°)
 #   A4:     173 0 20     (Wrist rotation - X-axis rotation)
 #   A5:     135.5 0 0    (Wrist roll - Y-axis rotation)
 #   A6:     57.06 0 0    (End effector - X-axis rotation)
@@ -347,13 +347,13 @@ Group {
     # about Z, so it looks at the robot from a perpendicular horizontal angle.
     # ========================================================================
     # Tuned by hand (live, in-browser) against panda.wrl's FrontView so both
-    # robots occupy roughly the same on-screen scale/position at HOME —
-    # a fixed-offset derivation wasn't enough since the two robots have very
-    # differently-shaped HOME poses (FR3 folds tall/vertical; KUKA's A2/A3
-    # HOME folds into a more horizontal reach).
+    # robots occupy roughly the same on-screen scale/position at HOME. Also
+    # re-tuned after changing A3's HOME angle from 90° to 65° (see joint
+    # hierarchy comment above) so the arm stands up diagonally like FR3's
+    # instead of folding into a low horizontal reach.
     DEF FrontView Viewpoint {
       description "Front View"
-      position 0 -1150 130
+      position 0 -1400 250
       orientation 1 0 0 1.39
       fieldOfView 0.65
     }

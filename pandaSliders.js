@@ -39,10 +39,14 @@
       // Ranges match the "slider shows" values documented in kuka.wrl /
       // the original KR4R600digiTwin.html axisConfig (degrees). Axes match
       // the AxisConverter wiring in kuka.wrl: A1=Z, A2/A3/A5=Y, A4/A6=X.
+      // A3 init was 90 (folds the forearm flat, low horizontal reach —
+      // looked "sitting" next to FR3's upright HOME); changed to 65 so the
+      // default pose stands the arm up and reaches diagonally like FR3's,
+      // instead of folding low. Verified safe via PandaSafety.checkSafety.
       jointConfig: [
         { name: 'A1', label: 'A1', min: -165, max:  165, init:   0, color: '#e63946', axis: [0,0,1] },
         { name: 'A2', label: 'A2', min: -190, max:   35, init: -90, color: '#f4a261', axis: [0,1,0] },
-        { name: 'A3', label: 'A3', min: -110, max:  145, init:  90, color: '#2a9d8f', axis: [0,1,0] },
+        { name: 'A3', label: 'A3', min: -110, max:  145, init:  65, color: '#2a9d8f', axis: [0,1,0] },
         { name: 'A4', label: 'A4', min: -180, max:  180, init:   0, color: '#457b9d', axis: [1,0,0] },
         { name: 'A5', label: 'A5', min: -115, max:  115, init:   0, color: '#a8dadc', axis: [0,1,0] },
         { name: 'A6', label: 'A6', min: -345, max:  345, init:   0, color: '#e9c46a', axis: [1,0,0] },

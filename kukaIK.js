@@ -673,7 +673,10 @@
         getLinkPoints,
         solveIK,
         checkWorkspace,
-        HOME: [0, -90 * DEG, 90 * DEG, 0, 0, 0], // A1..A6, radians — matches WRL HOME comment
+        // A1..A6, radians. A3 was 90° (low, folded "sitting" pose); changed
+        // to 65° to match pandaSliders.js's ROBOTS.kuka jointConfig init,
+        // which now stands the arm up diagonally like FR3's HOME instead.
+        HOME: [0, -90 * DEG, 65 * DEG, 0, 0, 0],
         LIMITS: JOINT_NAMES.map(n => [JOINT_LIMITS[n].min, JOINT_LIMITS[n].max]),
     };
 
