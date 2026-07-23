@@ -332,8 +332,12 @@ Group {
     DirectionalLight { direction -1 -1 -1 intensity 1.0 }
     PointLight { location 0 1000 500 intensity 0.8 }
 
-    # Ground Plane
-    GroundPlane {}
+    # Ground Plane — omitted from the default render. panda.wrl (FR3) has no
+    # floor geometry at all, just the dark Background; keeping this robot's
+    # framing visually consistent with FR3 (clean dark backdrop, no grid)
+    # was requested directly, so this PROTO is left defined above but not
+    # instantiated here. Re-add "GroundPlane {}" below if a floor reference
+    # is ever wanted back.
 
     # ========================================================================
     # Viewpoints - DEF'd to match the FR3 scene's naming so the app's
@@ -342,13 +346,14 @@ Group {
     # it's derived by rotating SideView's camera position+orientation 90°
     # about Z, so it looks at the robot from a perpendicular horizontal angle.
     # ========================================================================
-    # Mirrors panda.wrl's FrontView geometry exactly (same distance/tilt/FOV),
-    # just re-centered in Z by -400 to match this robot's root Transform
-    # offset (see "translation 0 0 -400" below) so the default framing on
-    # load looks the same relative distance/height as the FR3 scene's.
+    # Tuned by hand (live, in-browser) against panda.wrl's FrontView so both
+    # robots occupy roughly the same on-screen scale/position at HOME —
+    # a fixed-offset derivation wasn't enough since the two robots have very
+    # differently-shaped HOME poses (FR3 folds tall/vertical; KUKA's A2/A3
+    # HOME folds into a more horizontal reach).
     DEF FrontView Viewpoint {
       description "Front View"
-      position 0 -1800 300
+      position 0 -1150 130
       orientation 1 0 0 1.39
       fieldOfView 0.65
     }
