@@ -8,11 +8,14 @@
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
   <link rel="stylesheet" href="https://create3000.github.io/code/x_ite/latest/x_ite.css"/>
   <script src="https://create3000.github.io/code/x_ite/latest/x_ite.min.js"></script>
-  <script src="pandaIK.js"></script>
-  <script src="kukaIK.js"></script>
-  <script src="pandaSafety.js"></script>
-  <script src="pandaSliders.js"></script>
-  <script src="pandaKRL.js"></script>
+  <!-- ?v=N cache-busts these against GitHub Pages/browser caching (bit us
+       twice: an updated .js deployed fine but browsers kept serving the old
+       cached copy for minutes after). Bump N whenever any of these change. -->
+  <script src="pandaIK.js?v=3"></script>
+  <script src="kukaIK.js?v=3"></script>
+  <script src="pandaSafety.js?v=3"></script>
+  <script src="pandaSliders.js?v=3"></script>
+  <script src="pandaKRL.js?v=3"></script>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
