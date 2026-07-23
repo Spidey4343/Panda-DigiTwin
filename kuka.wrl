@@ -304,10 +304,10 @@ PROTO CollisionSensor [
 # Final joint transforms:
 #   A_base: 0 0 0
 #   A1:     0 0 187.2    (Base swivel - Z-axis rotation)
-#   A2:     0 0 140.9    (Shoulder - Y-axis rotation, HOME=-90°)
-#   A3:     0 0 289.6    (Elbow - Y-axis rotation, HOME=+65°)
+#   A2:     0 0 140.9    (Shoulder - Y-axis rotation, HOME=0°)
+#   A3:     0 0 289.6    (Elbow - Y-axis rotation, HOME=0°)
 #   A4:     173 0 20     (Wrist rotation - X-axis rotation)
-#   A5:     135.5 0 0    (Wrist roll - Y-axis rotation)
+#   A5:     135.5 0 0    (Wrist roll - Y-axis rotation, HOME=+45°)
 #   A6:     57.06 0 0    (End effector - X-axis rotation)
 
 # Axis converters for non-standard rotation axes
@@ -347,10 +347,11 @@ Group {
     # about Z, so it looks at the robot from a perpendicular horizontal angle.
     # ========================================================================
     # Tuned by hand (live, in-browser) against panda.wrl's FrontView so both
-    # robots occupy roughly the same on-screen scale/position at HOME. Also
-    # re-tuned after changing A3's HOME angle from 90° to 65° (see joint
-    # hierarchy comment above) so the arm stands up diagonally like FR3's
-    # instead of folding into a low horizontal reach.
+    # robots occupy roughly the same on-screen scale/position at HOME. HOME
+    # itself went through two iterations (A2=-90/A3=65, then the current
+    # A2=0/A3=0/A5=45 — see joint hierarchy comment above) before landing on
+    # an upright, diagonally-reaching pose that reads the same way FR3's
+    # HOME does; this camera framing still holds for the current one.
     DEF FrontView Viewpoint {
       description "Front View"
       position 0 -1400 250

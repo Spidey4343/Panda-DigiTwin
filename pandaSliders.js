@@ -39,16 +39,17 @@
       // Ranges match the "slider shows" values documented in kuka.wrl /
       // the original KR4R600digiTwin.html axisConfig (degrees). Axes match
       // the AxisConverter wiring in kuka.wrl: A1=Z, A2/A3/A5=Y, A4/A6=X.
-      // A3 init was 90 (folds the forearm flat, low horizontal reach —
-      // looked "sitting" next to FR3's upright HOME); changed to 65 so the
-      // default pose stands the arm up and reaches diagonally like FR3's,
-      // instead of folding low. Verified safe via PandaSafety.checkSafety.
+      // HOME (A2/A3/A5 init) was tuned twice: first A2=-90,A3=65 (still
+      // read as "sitting" vs FR3's upright HOME), then live-tuned again by
+      // hand to A2=0,A3=0,A5=45 — upper arm and forearm both vertical,
+      // wrist bent 45° — which stands the arm up and reaches diagonally
+      // like FR3's HOME instead. Verified safe via PandaSafety.checkSafety.
       jointConfig: [
         { name: 'A1', label: 'A1', min: -165, max:  165, init:   0, color: '#e63946', axis: [0,0,1] },
-        { name: 'A2', label: 'A2', min: -190, max:   35, init: -90, color: '#f4a261', axis: [0,1,0] },
-        { name: 'A3', label: 'A3', min: -110, max:  145, init:  65, color: '#2a9d8f', axis: [0,1,0] },
+        { name: 'A2', label: 'A2', min: -190, max:   35, init:   0, color: '#f4a261', axis: [0,1,0] },
+        { name: 'A3', label: 'A3', min: -110, max:  145, init:   0, color: '#2a9d8f', axis: [0,1,0] },
         { name: 'A4', label: 'A4', min: -180, max:  180, init:   0, color: '#457b9d', axis: [1,0,0] },
-        { name: 'A5', label: 'A5', min: -115, max:  115, init:   0, color: '#a8dadc', axis: [0,1,0] },
+        { name: 'A5', label: 'A5', min: -115, max:  115, init:  45, color: '#a8dadc', axis: [0,1,0] },
         { name: 'A6', label: 'A6', min: -345, max:  345, init:   0, color: '#e9c46a', axis: [1,0,0] },
       ],
     },
@@ -136,6 +137,11 @@
           e.target.value = this.value; // snap the handle back to the last safe angle
           return;
         }
+        // Clear any earlier "Blocked" warning once a drag makes it back into
+        // safe territory — without this the red error message from a brief
+        // unsafe moment mid-drag stuck around and made an already-safe pose
+        // look like it was still colliding.
+        if (typeof window.setStatus === 'function') window.setStatus('Ready', '');
         this._rotate(newVal);
       });
       this._updateBar();

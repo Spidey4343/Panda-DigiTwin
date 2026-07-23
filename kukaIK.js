@@ -673,10 +673,10 @@
         getLinkPoints,
         solveIK,
         checkWorkspace,
-        // A1..A6, radians. A3 was 90° (low, folded "sitting" pose); changed
-        // to 65° to match pandaSliders.js's ROBOTS.kuka jointConfig init,
-        // which now stands the arm up diagonally like FR3's HOME instead.
-        HOME: [0, -90 * DEG, 65 * DEG, 0, 0, 0],
+        // A1..A6, radians. Matches pandaSliders.js's ROBOTS.kuka jointConfig
+        // init (A2=0,A3=0,A5=45) — upper arm and forearm vertical, wrist
+        // bent 45°, standing the arm up diagonally like FR3's HOME.
+        HOME: [0, 0, 0, 0, 45 * DEG, 0],
         LIMITS: JOINT_NAMES.map(n => [JOINT_LIMITS[n].min, JOINT_LIMITS[n].max]),
     };
 
