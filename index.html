@@ -499,7 +499,10 @@ window.addEventListener('load', () => {
     if (!meta) return;
 
     const canvas = document.getElementById('x3dCanvas');
-    canvas.setAttribute('src', PandaSliderControl.ROBOTS[key].wrl);
+    // Cache-bust: GitHub Pages caches .wrl files for several minutes, so
+    // without this, switching robots right after a deploy can show a
+    // stale/outdated model until the browser's cache naturally expires.
+    canvas.setAttribute('src', PandaSliderControl.ROBOTS[key].wrl + '?v=' + Date.now());
 
     PandaSliderControl.setRobot(key);
     if (typeof IKController !== 'undefined') IKController.onRobotChanged();
