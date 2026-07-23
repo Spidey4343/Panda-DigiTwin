@@ -1,7 +1,14 @@
 /**
- * PandaSliderControl — Franka Research 3 (FR3) 7-DOF
- * All joints rotate around Z-axis in their local frame
- * Exact limits from joint_limits.yaml
+ * PandaSliderControl — robot-agnostic joint slider system.
+ * Originally built for the Franka Research 3 (FR3), 7-DOF, all joints
+ * rotating around Z in their local frame. Extended to also drive the KUKA
+ * KR4R600 (6-DOF, mixed Z/Y/X joint axes) so the app's header toggle can
+ * switch which robot is live without touching any other module — every
+ * function here already iterates the *active* JOINT_CONFIG, so adding a
+ * second robot only meant: (1) making JOINT_CONFIG swappable instead of a
+ * hardcoded const, (2) giving each joint its own rotation axis instead of
+ * assuming Z, and (3) a setRobot() entry point that tears down and rebuilds
+ * the slider DOM + X3D bindings for the newly active config.
  */
 (function () {
   'use strict';
@@ -9,24 +16,52 @@
   const DEG = Math.PI / 180;
   const RAD = 180 / Math.PI;
 
-  const JOINT_CONFIG = [
-    { name: 'joint1', label: 'J1', min: -166, max:  166, init:   0, color: '#e63946' },
-    { name: 'joint2', label: 'J2', min: -105, max:  105, init: -45, color: '#f4a261' },
-    { name: 'joint3', label: 'J3', min: -166, max:  166, init:   0, color: '#2a9d8f' },
-    { name: 'joint4', label: 'J4', min: -176, max:   -7, init:-135, color: '#457b9d' },
-    { name: 'joint5', label: 'J5', min: -165, max:  165, init:   0, color: '#a8dadc' },
-    { name: 'joint6', label: 'J6', min:   25, max:  265, init:  90, color: '#e9c46a' },
-    { name: 'joint7', label: 'J7', min: -175, max:  175, init:  45, color: '#c77dff' },
-  ];
+  // ── Robot configs ───────────────────────────────────────────
+  // axis: [x,y,z] rotation axis in the joint's local frame (defaults to
+  // Z if omitted, which keeps the original FR3 config unchanged).
+  const ROBOTS = {
+    fr3: {
+      label: 'FR3',
+      wrl: 'panda.wrl',
+      jointConfig: [
+        { name: 'joint1', label: 'J1', min: -166, max:  166, init:   0, color: '#e63946', axis: [0,0,1] },
+        { name: 'joint2', label: 'J2', min: -105, max:  105, init: -45, color: '#f4a261', axis: [0,0,1] },
+        { name: 'joint3', label: 'J3', min: -166, max:  166, init:   0, color: '#2a9d8f', axis: [0,0,1] },
+        { name: 'joint4', label: 'J4', min: -176, max:   -7, init:-135, color: '#457b9d', axis: [0,0,1] },
+        { name: 'joint5', label: 'J5', min: -165, max:  165, init:   0, color: '#a8dadc', axis: [0,0,1] },
+        { name: 'joint6', label: 'J6', min:   25, max:  265, init:  90, color: '#e9c46a', axis: [0,0,1] },
+        { name: 'joint7', label: 'J7', min: -175, max:  175, init:  45, color: '#c77dff', axis: [0,0,1] },
+      ],
+    },
+    kuka: {
+      label: 'KR4R600',
+      wrl: 'kuka.wrl',
+      // Ranges match the "slider shows" values documented in kuka.wrl /
+      // the original KR4R600digiTwin.html axisConfig (degrees). Axes match
+      // the AxisConverter wiring in kuka.wrl: A1=Z, A2/A3/A5=Y, A4/A6=X.
+      jointConfig: [
+        { name: 'A1', label: 'A1', min: -165, max:  165, init:   0, color: '#e63946', axis: [0,0,1] },
+        { name: 'A2', label: 'A2', min: -190, max:   35, init: -90, color: '#f4a261', axis: [0,1,0] },
+        { name: 'A3', label: 'A3', min: -110, max:  145, init:  90, color: '#2a9d8f', axis: [0,1,0] },
+        { name: 'A4', label: 'A4', min: -180, max:  180, init:   0, color: '#457b9d', axis: [1,0,0] },
+        { name: 'A5', label: 'A5', min: -115, max:  115, init:   0, color: '#a8dadc', axis: [0,1,0] },
+        { name: 'A6', label: 'A6', min: -345, max:  345, init:   0, color: '#e9c46a', axis: [1,0,0] },
+      ],
+    },
+  };
+
+  let activeRobot   = 'fr3';
+  let JOINT_CONFIG  = ROBOTS.fr3.jointConfig;
+  let _parentId     = 'slider-list';
 
   const _namedConfigs = {};
   const _instances    = {};
 
   // ── Safety gate ─────────────────────────────────────────────
-  // Builds the full 7-joint radian array (current angles + any overrides),
-  // runs it through PandaSafety, and returns the result. Fails open (safe)
-  // if the safety module isn't loaded, so a missing script never bricks
-  // normal operation.
+  // Builds the active robot's full joint radian array (current angles + any
+  // overrides), runs it through PandaSafety for whichever robot is active,
+  // and returns the result. Fails open (safe) if the safety module isn't
+  // loaded, so a missing script never bricks normal operation.
   function checkTargetSafety(overrides) {
     if (typeof window.PandaSafety === 'undefined') return { safe: true };
     const rad = JOINT_CONFIG.map(cfg => {
@@ -35,7 +70,7 @@
         : (_instances[cfg.name] ? _instances[cfg.name].getValue() : cfg.init);
       return deg * DEG;
     });
-    return window.PandaSafety.checkSafety(rad);
+    return window.PandaSafety.checkSafety(rad, activeRobot);
   }
 
   function warnUnsafe(result) {
@@ -44,7 +79,7 @@
     const msg = `Blocked: ${reason}${detail}`;
     if (typeof window.setStatus === 'function') window.setStatus('⛔ ' + msg, 'err');
     if (typeof window.termLog === 'function') window.termLog(msg, 'err');
-    console.warn('[FR3 Safety] ' + msg);
+    console.warn(`[${activeRobot.toUpperCase()} Safety] ` + msg);
   }
 
   // ── JointSlider class ────────────────────────────────────────
@@ -110,7 +145,7 @@
       // but never touched the live 3D model).
       const attempt = (tries) => {
         if (tries <= 0) {
-          console.warn(`[FR3] ${this.cfg.name} failed to connect to 3D scene`);
+          console.warn(`[${activeRobot.toUpperCase()}] ${this.cfg.name} failed to connect to 3D scene`);
           return;
         }
         try {
@@ -122,8 +157,8 @@
           if (!node) { setTimeout(() => attempt(tries - 1), 400); return; }
 
           this.node = node;
-          // All joints rotate around Z in local frame
-          this.Rot = new X3D.SFRotation(0, 0, 1, this.cfg.init * DEG);
+          const ax = this.cfg.axis || [0, 0, 1]; // default Z, matches original FR3 behavior
+          this.Rot = new X3D.SFRotation(ax[0], ax[1], ax[2], this.cfg.init * DEG);
           this.node.rotation = this.Rot;
 
           // Bidirectional: scene drag → slider
@@ -133,7 +168,7 @@
             });
           } catch(e) { /* field callback not always available */ }
 
-          console.log(`[FR3] ${this.cfg.name} connected`);
+          console.log(`[${activeRobot.toUpperCase()}] ${this.cfg.name} connected`);
         } catch(e) {
           setTimeout(() => attempt(tries - 1), 400);
         }
@@ -192,16 +227,47 @@
       };
       requestAnimationFrame(tick);
     }
+
+    destroy() {
+      if (this.sliderEl) {
+        const wrap = this.sliderEl.closest('.joint-slider-wrap');
+        if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      }
+    }
   }
 
   // ── Static API ───────────────────────────────────────────────
 
   function init(parentId) {
+    _parentId = parentId;
     JOINT_CONFIG.forEach(cfg => {
       _instances[cfg.name] = new JointSlider(cfg, parentId);
     });
     if (window.IKController) window.IKController.setSliderInstances(_instances);
   }
+
+  // Switches which robot's joints the slider panel drives. Tears down the
+  // current slider DOM + instances and rebuilds from the new robot's
+  // JOINT_CONFIG. Named configs are cleared since joint names (joint1..7
+  // vs A1..A6) aren't shared between robots.
+  function setRobot(robotKey) {
+    if (!ROBOTS[robotKey]) { console.warn('[PandaSliderControl] unknown robot:', robotKey); return false; }
+    activeRobot = robotKey;
+    JOINT_CONFIG = ROBOTS[robotKey].jointConfig;
+
+    Object.values(_instances).forEach(inst => inst.destroy());
+    Object.keys(_instances).forEach(k => delete _instances[k]);
+    Object.keys(_namedConfigs).forEach(k => delete _namedConfigs[k]);
+
+    const parent = document.getElementById(_parentId);
+    if (parent) parent.innerHTML = '';
+
+    init(_parentId);
+    return true;
+  }
+
+  function getActiveRobot() { return activeRobot; }
+  function getRobotList()   { return Object.keys(ROBOTS).map(key => ({ key, label: ROBOTS[key].label, wrl: ROBOTS[key].wrl })); }
 
   function loadAllAngles(map, animate) {
     // Only gate discrete "go to this target" calls (animate=true — PTP, HOME,
@@ -246,19 +312,21 @@
   function deleteNamedConfig(name) { if(!_namedConfigs[name]) return false; delete _namedConfigs[name]; return true; }
 
   function saveToLocalStorage() {
-    try { localStorage.setItem('fr3Angles', JSON.stringify(getAllAngles())); return true; } catch(e){ return false; }
+    try { localStorage.setItem('fr3Angles_' + activeRobot, JSON.stringify(getAllAngles())); return true; } catch(e){ return false; }
   }
   function loadFromLocalStorage(animate) {
-    try { return loadAllAngles(JSON.parse(localStorage.getItem('fr3Angles')||'{}'), animate); } catch(e){ return false; }
+    try { return loadAllAngles(JSON.parse(localStorage.getItem('fr3Angles_' + activeRobot)||'{}'), animate); } catch(e){ return false; }
   }
   function exportAsJSON()      { return JSON.stringify(getAllAngles(), null, 2); }
   function importFromJSON(str) { try { return loadAllAngles(JSON.parse(str), true); } catch(e){ return false; } }
 
   window.PandaSliderControl = {
-    init, loadAllAngles, setSingleJoint, getAllAngles, getHomeAngles,
+    init, setRobot, getActiveRobot, getRobotList,
+    loadAllAngles, setSingleJoint, getAllAngles, getHomeAngles,
     getConfigList, saveNamedConfig, loadNamedConfig, deleteNamedConfig,
     saveToLocalStorage, loadFromLocalStorage, exportAsJSON, importFromJSON,
-    JOINT_CONFIG,
+    get JOINT_CONFIG() { return JOINT_CONFIG; },
+    ROBOTS,
   };
 
 })();

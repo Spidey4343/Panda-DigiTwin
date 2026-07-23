@@ -76,10 +76,17 @@
 
       if ((m = line.match(/^PTP\s*\{([^}]+)\}/i))) {
         const body = m[1];
+        // Keyed by axis NUMBER (1-7), not a robot-specific joint name — the
+        // parser stays robot-agnostic; JSBackend.move_ptp translates these
+        // into whichever robot is currently active's real joint names
+        // (joint1..joint7 for FR3, A1..A6 for KUKA). A PTP command only
+        // ever needs to name as many axes as the active robot has (KUKA
+        // commands simply won't include A7, which this loop already
+        // tolerates since it only stores an axis if a match is found).
         const angles = {};
         for (let i = 1; i <= 7; i++) {
           const mm = body.match(new RegExp('A' + i + '\\s*([\\-\\d.]+)', 'i'));
-          if (mm) angles['joint' + i] = parseFloat(mm[1]);
+          if (mm) angles[i] = parseFloat(mm[1]);
         }
         return { type: 'MOVE_PTP', angles, line };
       }
@@ -242,7 +249,24 @@
   // swapped in via KRLEngine.setBackend() (INT-02 backend switching).
   const JSBackend = {
     async move_ptp(anglesMap) {
-      const ok = window.PandaSliderControl.loadAllAngles(anglesMap, true); // 700ms eased animation
+      // anglesMap may be axis-NUMBER-keyed (from a parsed PTP {A1 .. A7 ..}
+      // command — see PAR-01) or already real-joint-name-keyed (from
+      // ctx.homeAngles(), i.e. PandaSliderControl.getHomeAngles(), which
+      // already returns whatever the active robot's real names are).
+      // Translate the numeric case into the ACTIVE robot's real joint
+      // names here — this is the one place PTP becomes robot-specific,
+      // keeping the parser/dispatcher (PAR-01/EXE-02) robot-agnostic.
+      const cfg = window.PandaSliderControl.JOINT_CONFIG;
+      const named = {};
+      Object.entries(anglesMap).forEach(([k, v]) => {
+        if (/^\d+$/.test(k)) {
+          const idx = parseInt(k, 10) - 1;
+          if (cfg[idx]) named[cfg[idx].name] = v;
+        } else {
+          named[k] = v;
+        }
+      });
+      const ok = window.PandaSliderControl.loadAllAngles(named, true); // 700ms eased animation
       if (!ok) throw new Error('PTP blocked by safety check (self-collision or ground contact)');
       return new Promise(resolve => setTimeout(resolve, 750));
     },

@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="https://create3000.github.io/code/x_ite/latest/x_ite.css"/>
   <script src="https://create3000.github.io/code/x_ite/latest/x_ite.min.js"></script>
   <script src="pandaIK.js"></script>
+  <script src="kukaIK.js"></script>
   <script src="pandaSafety.js"></script>
   <script src="pandaSliders.js"></script>
   <script src="pandaKRL.js"></script>
@@ -35,12 +36,16 @@
         </svg>
       </div>
       <div>
-        <div class="header-title">Franka Research 3</div>
-        <div class="header-sub">Digital Twin — PFH Hansecampus Stade</div>
+        <div class="header-title" id="headerTitle">Franka Research 3</div>
+        <div class="header-sub" id="headerSub">Digital Twin — PFH Hansecampus Stade</div>
       </div>
     </div>
 
     <div class="header-center">
+      <div class="robot-switch" id="robotSwitch">
+        <button class="robot-switch-btn active" data-robot="fr3" title="Switch to Franka FR3">FR3</button>
+        <button class="robot-switch-btn" data-robot="kuka" title="Switch to KUKA KR4R600">KR4R600</button>
+      </div>
       <div class="tcp-bar">
         <span class="tcp-label">TCP</span>
         <span id="tcpX" class="tcp-val">—</span>
@@ -53,7 +58,7 @@
     </div>
 
     <div class="header-right">
-      <span class="badge">7-DOF</span>
+      <span class="badge" id="dofBadge">7-DOF</span>
       <span class="badge badge-green" id="connBadge">● X_ITE</span>
       <button class="btn-icon" id="resetJoints" title="Reset to home">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -91,7 +96,7 @@
       </div>
 
       <!-- Info chip -->
-      <div class="viewport-chip">FR3 · Reach 855 mm · Payload 3 kg</div>
+      <div class="viewport-chip" id="viewportChip">FR3 · Reach 855 mm · Payload 3 kg</div>
 
       <!-- Hover tooltip -->
       <div id="link-tooltip-overlay"></div>
@@ -453,24 +458,13 @@ window.addEventListener('load', () => {
   // Build sliders
   PandaSliderControl.init('slider-list');
 
-  // Init IK
+  // Init IK — IKController.init() already starts its own robot-aware live
+  // TCP polling (routes through whichever of PandaIK/KukaIK is active), so
+  // there's no separate polling loop needed here.
   setTimeout(() => {
     if (typeof IKController !== 'undefined') {
       IKController.init();
       IKController.addSliderListener();
-      // Live TCP update
-      setInterval(() => {
-        if (typeof PandaIK !== 'undefined') {
-          const angles = PandaSliderControl.getAllAngles();
-          const rad    = PandaSliderControl.JOINT_CONFIG.map(c =>
-            (angles[c.name] || c.init) * PandaIK.DEG
-          );
-          try {
-            const tcp = PandaIK.getTCP(rad);
-            updateTCPDisplay(tcp);
-          } catch(e) {}
-        }
-      }, 150);
     }
   }, 800);
 
@@ -488,6 +482,43 @@ window.addEventListener('load', () => {
     PandaSliderControl.loadAllAngles(PandaSliderControl.getHomeAngles(), true);
     setStatus('Moved to home', 'ok');
     termLog('HOME executed', 'ok');
+  });
+
+  // ── Robot switcher (FR3 / KUKA KR4R600) ─────────────────────
+  // Swaps the X3D scene, rebuilds the joint sliders for the new robot's
+  // axis count/names, and resets the IK controller's working angle vector
+  // — everything else (KRL parser/dispatcher/interpreter, safety module,
+  // backend wrapper) already routes through whichever robot is active.
+  const ROBOT_META = {
+    fr3:  { title: 'Franka Research 3', sub: 'Digital Twin — PFH Hansecampus Stade', dof: '7-DOF', chip: 'FR3 · Reach 855 mm · Payload 3 kg' },
+    kuka: { title: 'KUKA KR4 R600',     sub: 'Digital Twin — PFH Hansecampus Stade', dof: '6-DOF', chip: 'KR4R600 · Reach 750 mm · Payload 4 kg' },
+  };
+
+  function switchRobot(key) {
+    const meta = ROBOT_META[key];
+    if (!meta) return;
+
+    const canvas = document.getElementById('x3dCanvas');
+    canvas.setAttribute('src', PandaSliderControl.ROBOTS[key].wrl);
+
+    PandaSliderControl.setRobot(key);
+    if (typeof IKController !== 'undefined') IKController.onRobotChanged();
+
+    document.getElementById('headerTitle').textContent = meta.title;
+    document.getElementById('headerSub').textContent = meta.sub;
+    document.getElementById('dofBadge').textContent = meta.dof;
+    document.getElementById('viewportChip').textContent = meta.chip;
+
+    document.querySelectorAll('.robot-switch-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.robot === key);
+    });
+
+    setStatus(`Switched to ${meta.title}`, 'ok');
+    termLog(`Robot switched: ${meta.title}`, 'ok');
+  }
+
+  document.querySelectorAll('.robot-switch-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchRobot(btn.dataset.robot));
   });
 
   // Share link — copies the current page URL to the clipboard.
@@ -579,21 +610,9 @@ window.addEventListener('load', () => {
     if (e.key === 'Enter') document.getElementById('execute').click();
   });
 
-  // IK buttons
-  document.getElementById('getCurrentTCP').onclick = () => {
-    if (typeof PandaIK !== 'undefined') {
-      const angles = PandaSliderControl.getAllAngles();
-      const rad    = PandaSliderControl.JOINT_CONFIG.map(c =>
-        (angles[c.name] || c.init) * PandaIK.DEG
-      );
-      const tcp = PandaIK.getTCP(rad);
-      document.getElementById('X').value = tcp[0].toFixed(1);
-      document.getElementById('Y').value = tcp[1].toFixed(1);
-      document.getElementById('Z').value = tcp[2].toFixed(1);
-      updateTCPDisplay(tcp);
-      setStatus(`TCP: [${tcp[0].toFixed(0)}, ${tcp[1].toFixed(0)}, ${tcp[2].toFixed(0)}]`,'ok');
-    }
-  };
+  // IK buttons — "Get TCP" is wired by IKController.init() itself
+  // (captureTCP(), which already routes through whichever robot is
+  // active), so there's no separate handler needed here.
 
   // Program Editor (multi-line KRL: DECL/IF/WHILE/WAIT/$OUT/motion)
   document.getElementById('runProgram').onclick = runKRLProgram;

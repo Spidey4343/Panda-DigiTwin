@@ -1,0 +1,583 @@
+#VRML V2.0 utf8
+
+# ============================================================================
+# KUKA KR4 R600 6-Axis Robot Arm - Interactive 3D Model
+# ============================================================================
+# Adapted for the FR3 Digital Twin app's dual-robot switcher.
+# Original model, PROTOs, DH-consistent joint hierarchy and viewpoints by
+# Sanath (previous AR_2026 DigiTwin cohort) — reused with credit, per
+# Prof. Avgustinov's suggestion that the app be adaptable across robot
+# geometries. Only two things changed from the original:
+#   1. All Inline/geometryUrl paths repointed to ./meshes-kuka/
+#   2. Viewpoints given DEF names (+ a new FrontView) so the app's existing
+#      gotoView() button logic works unchanged for this robot too.
+# ============================================================================
+
+# Ground Plane PROTO for spatial reference
+PROTO GroundPlane [
+  field SFVec2f size 2000 2000
+  field SFVec2f subdivisions 20 20
+]{
+  Transform {
+    translation 0 0 -400 # Matches robot base depth
+    children [
+      Shape {
+        appearance Appearance {
+          material Material { diffuseColor 0.2 0.2 0.2 }
+        }
+        geometry IndexedFaceSet {
+          coord Coordinate {
+            point [ -1000 -1000 0, 1000 -1000 0, 1000 1000 0, -1000 1000 0 ]
+          }
+          coordIndex [ 0 1 2 3 -1 ]
+          solid FALSE
+        }
+      }
+      # Grid Lines
+      Shape {
+        geometry IndexedLineSet {
+          color Color { color [ 0.4 0.4 0.4 ] }
+          coord Coordinate {
+            point [
+              -1000 -1000 0.1, 1000 -1000 0.1, 1000 1000 0.1, -1000 1000 0.1,
+              0 -1000 0.1, 0 1000 0.1, -1000 0 0.1, 1000 0 0.1
+            ]
+          }
+          coordIndex [ 0 1 2 3 0 -1, 4 5 -1, 6 7 -1 ]
+        }
+      }
+    ]
+  }
+}
+
+# Coordinate system PROTO for joint visualization
+PROTO coSys [
+  exposedField SFVec3f scale 200 200 200
+]{
+  Collision {
+    collide FALSE
+    children [
+      Transform {
+        scale IS scale
+        children [
+          Shape {
+            geometry IndexedLineSet {
+              color Color { color [ .5 0 0  0 .5 0  0 0 .5  1 0 0  0 1 0  0 0 1  1 1 1 0 0 0] }
+              coord Coordinate {
+                point [
+                  0 0 0
+                  -1 0 0
+                  0 -1 0
+                  0 0 -1
+                  1 0 0
+                  0 1 0
+                  0 0 1
+                ]
+              }
+              coordIndex [ 0 1 -1  0 2 -1  0 3 -1  0 4 -1  0 5 -1  0 6 -1 ]
+              colorPerVertex FALSE
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+
+# SCHUNK Gripper PROTO - End effector gripper model
+PROTO SchunkGripper [
+  exposedField SFVec3f translation 0 0 0
+  exposedField SFRotation rotation 0 1 0 0
+  exposedField SFVec3f scale 1 1 1
+  exposedField MFNode children []
+]{
+  Transform {
+    translation IS translation
+    rotation IS rotation
+    scale IS scale
+    children [
+      Inline {
+        url ["meshes-kuka/SCHUNK-0310940 EGP 40-N-N-B, 00ohne.wrl"]
+      }
+      Group {
+        children IS children
+      }
+    ]
+  }
+}
+
+# Finger PROTO - Gripper finger model
+PROTO GripperFinger [
+  exposedField SFVec3f translation 0 0 0
+  exposedField SFRotation rotation 0 1 0 0
+  exposedField SFVec3f scale 1 1 1
+]{
+  Transform {
+    translation IS translation
+    rotation IS rotation
+    scale IS scale
+    children [
+      Inline {
+        url ["meshes-kuka/prizmfinger.wrl"]
+      }
+    ]
+  }
+}
+
+# Adapter Flange to Gripper PROTO - End effector adapter
+PROTO AdapterFlanch2gripper [
+  exposedField SFVec3f translation 0 0 0
+  exposedField SFRotation rotation 0 1 0 0
+  exposedField SFVec3f scale 1 1 1
+  exposedField MFNode children []
+]{
+  Transform {
+    translation IS translation
+    rotation IS rotation
+    scale IS scale
+    children [
+      Inline {
+        url ["meshes-kuka/AdapterFlanch2gripper.wrl"]
+      }
+      Group {
+        children IS children
+      }
+    ]
+  }
+}
+
+# RobotJoint PROTO - Modular joint with position, orientation, geometry, sensor, and nesting
+PROTO RobotJoint [
+  exposedField SFString jointName ""          # Joint identifier (e.g., "J1", "J2")
+  exposedField SFVec3f translation 0 0 0      # Position relative to parent
+  exposedField SFRotation rotation 0 1 0 0    # Orientation of joint
+  exposedField MFString geometryUrl []        # Geometry file to load
+  exposedField SFVec3f geometryOffset 0 0 0   # Offset for geometry (to adjust rotation pivot)
+  exposedField SFFloat jointLength 0          # Length parameter (for reference/documentation)
+  exposedField SFBool hasSensor FALSE         # Enable/disable interactive sensor
+  exposedField SFFloat minAngle -3.14159      # Minimum rotation angle (radians)
+  exposedField SFFloat maxAngle 3.14159       # Maximum rotation angle (radians)
+  exposedField SFBool showCoSys FALSE         # Show coordinate system
+  exposedField SFVec3f coSysScale 100 100 100 # Coordinate system scale
+  exposedField MFNode children []             # Nested child joints (enables recursion)
+  eventOut SFRotation rotation_changed        # Sensor rotation output
+  eventOut SFBool isOver_changed              # TouchSensor hover output
+  eventIn SFRotation set_rotation             # Transform rotation input
+	exposedField SFInt32 coSysType -1						# -1: invisible; 0: lines; higher numbers: other appearance, not yet implemented!
+]{
+  Group {
+    children [
+      DEF JointTransform Transform {
+    translation IS translation
+    rotation IS rotation
+    set_rotation IS set_rotation
+    children [
+      # Sensor (only active if hasSensor is TRUE)
+      DEF JointSensor CylinderSensor {
+        enabled IS hasSensor
+        autoOffset TRUE
+        minAngle IS minAngle
+        maxAngle IS maxAngle
+        diskAngle 0.262
+        rotation_changed IS rotation_changed
+      }
+
+      # TouchSensor for hover detection
+      DEF JointTouchSensor TouchSensor {
+        enabled TRUE
+        isOver IS isOver_changed
+      }
+
+      # Geometry with collision detection (with optional offset)
+      Transform {
+        translation IS geometryOffset
+        children [
+          Collision {
+            children [
+              Inline { url IS geometryUrl }
+            ]
+          }
+        ]
+      }
+
+      # Optional coordinate system visualization
+      DEF CoSysNode Switch {
+        whichChoice IS coSysType
+        choice [
+          coSys { scale IS coSysScale }
+        ]
+      }
+
+      # Nested children (enables hierarchical structure and recursion)
+      Group {
+        children IS children
+      }
+    ]
+  }
+    ]
+  }
+  ROUTE JointSensor.rotation_changed TO JointTransform.set_rotation
+}
+
+# ============================================================================
+# PROTO: AxisConverter - Converts joint rotation to specified axis
+# ============================================================================
+PROTO AxisConverter [
+  field SFVec3f axis 0 1 0  # Rotation axis (0 1 0 for Y, 1 0 0 for X, 0 0 1 for Z)
+  eventIn SFRotation rotation_in
+  eventOut SFRotation rotation_out
+]{
+  Script {
+    field SFVec3f conversionAxis IS axis
+    eventIn SFRotation rotation_in IS rotation_in
+    eventOut SFRotation rotation_out IS rotation_out
+    url "javascript:
+      function rotation_in(value, time) {
+        rotation_out[0] = conversionAxis[0];
+        rotation_out[1] = conversionAxis[1];
+        rotation_out[2] = conversionAxis[2];
+        rotation_out[3] = value[3];
+      }
+    "
+  }
+}
+
+# ============================================================================
+# PROTO: CollisionSensor - Proximity-based collision avoidance
+# ============================================================================
+PROTO CollisionSensor [
+  exposedField SFVec3f translation 0 0 0
+  exposedField SFVec3f center 0 0 0
+  exposedField SFVec3f size 100 100 100
+  eventOut SFBool isColliding
+]{
+  Group {
+    children [
+      DEF CollisionProx ProximitySensor {
+        center IS center
+        size IS size
+      }
+      Transform {
+        translation IS translation
+        children [
+          Shape {
+            appearance Appearance {
+              material Material {
+                diffuseColor 1 0.3 0.3
+                transparency 0.85
+                emissiveColor 0.3 0 0
+              }
+            }
+            geometry Sphere { radius 30 }
+          }
+        ]
+      }
+      DEF CollisionScript Script {
+        eventIn SFVec3f position_in
+        eventIn SFRotation orientation_in
+        eventOut SFBool isColliding IS isColliding
+        field SFFloat minFloorDistance 50.0
+        field SFBool collisionState FALSE
+        url "javascript:
+          function position_in(value, time) {
+            if (value[2] < minFloorDistance + (-400)) {
+              if (!collisionState) {
+                collisionState = true;
+                isColliding = true;
+              }
+            } else if (collisionState) {
+              collisionState = false;
+              isColliding = false;
+            }
+          }
+        "
+      }
+    ]
+  }
+  ROUTE CollisionProx.position_changed TO CollisionScript.position_in
+  ROUTE CollisionProx.orientation_changed TO CollisionScript.orientation_in
+}
+
+# ============================================================================
+# Robot Assembly Configuration — KUKA KR4 R600 6-Axis Industrial Manipulator
+# ============================================================================
+# Final joint transforms:
+#   A_base: 0 0 0
+#   A1:     0 0 187.2    (Base swivel - Z-axis rotation)
+#   A2:     0 0 140.9    (Shoulder - Y-axis rotation, HOME=-90°)
+#   A3:     0 0 289.6    (Elbow - Y-axis rotation, HOME=+90°)
+#   A4:     173 0 20     (Wrist rotation - X-axis rotation)
+#   A5:     135.5 0 0    (Wrist roll - Y-axis rotation)
+#   A6:     57.06 0 0    (End effector - X-axis rotation)
+
+# Axis converters for non-standard rotation axes
+DEF A1_AxisConverter AxisConverter { axis 0 0 1 }  # Z-axis for base swivel
+DEF A4_AxisConverter AxisConverter { axis 1 0 0 }  # X-axis for wrist rotation
+DEF A6_AxisConverter AxisConverter { axis 1 0 0 }  # X-axis for end effector
+
+Group {
+  children [
+    WorldInfo {
+      title "KUKA KR4 R600 6-Axis Robot Arm Assembly"
+      info [
+        "KUKA KR4 R600 Industrial Robot - Interactive Digital Twin"
+        "Original model by Sanath (AR_2026 DigiTwin cohort), adapted into"
+        "the FR3 app's dual-robot switcher."
+      ]
+    }
+
+    Background { skyColor 0.1 0.1 0.1 }
+
+    # Lighting for depth
+    DirectionalLight { direction -1 -1 -1 intensity 1.0 }
+    PointLight { location 0 1000 500 intensity 0.8 }
+
+    # Ground Plane
+    GroundPlane {}
+
+    # ========================================================================
+    # Viewpoints - DEF'd to match the FR3 scene's naming so the app's
+    # gotoView() button logic (Front/Side/Top/Iso) works unchanged.
+    # FrontView is new (the original file only had Side/Top/Isometric);
+    # it's derived by rotating SideView's camera position+orientation 90°
+    # about Z, so it looks at the robot from a perpendicular horizontal angle.
+    # ========================================================================
+    DEF FrontView Viewpoint {
+      description "Front View"
+      position 1815 100 5
+      orientation -0.014 1.0 -0.013 1.5478
+      fieldOfView 0.6
+    }
+
+    DEF SideView Viewpoint {
+      description "Side View"
+      position 100 -1815 5
+      orientation 1.0 0.014 -0.013 1.5478
+      fieldOfView 0.6
+    }
+
+    DEF TopView Viewpoint {
+      description "Top View"
+      position 0 -89 1773
+      orientation 0.671 -0.741 0.018 0.0734
+      fieldOfView 0.6
+    }
+
+    DEF IsometricView Viewpoint {
+      description "Isometric"
+      position 256 -1501 971
+      orientation 0.986 0.145 -0.077 0.9850
+      fieldOfView 0.85
+    }
+
+    # ========================================================================
+    # Robot Assembly - Hierarchical joint structure
+    # ========================================================================
+    Transform {
+      translation 0 0 -400
+      children [
+        # Base with TouchSensor
+        Transform {
+          children [
+            DEF Base_TouchSensor TouchSensor { }
+            DEF Base Inline { url "meshes-kuka/KR_4_R600_V01_X_T_base.wrz" }
+          ]
+        }
+
+        # Axis 1 (A1) - Z-axis rotation (base swivel)
+        DEF A1 RobotJoint {
+          jointName "A1"
+          translation 0 0 187.2
+          rotation 0 0 1 0
+          geometryUrl ["meshes-kuka/KR_4_R600_V01_X_T_0.wrl"]
+          jointLength 187.2
+          hasSensor TRUE
+          minAngle -2.880
+          maxAngle 2.880
+          showCoSys TRUE
+          coSysScale 200 200 200
+          children [
+            # Axis 2 (A2) - Y-axis rotation (shoulder pitch)
+            DEF A2 RobotJoint {
+              jointName "A2"
+              translation 0 0 140.9
+              geometryUrl ["meshes-kuka/KR_4_R600_V01_X_T_1.wrl"]
+              jointLength 140.9
+              hasSensor TRUE
+              minAngle -1.745
+              maxAngle 2.182
+              showCoSys TRUE
+              coSysScale 100 100 100
+              children [
+                # Collision sensor for shoulder link
+                DEF A2_CollisionSensor CollisionSensor {
+                  translation 0 0 145
+                  center 0 0 0
+                  size 300 300 400
+                }
+                # Axis 3 (A3) - Y-axis rotation (elbow)
+                DEF A3 RobotJoint {
+                  jointName "A3"
+                  translation 0 0 289.6
+                  geometryUrl ["meshes-kuka/KR_4_R600_V01_X_T_2.wrl"]
+                  jointLength 289.6
+                  hasSensor TRUE
+                  minAngle -3.491
+                  maxAngle 0.960
+                  showCoSys TRUE
+                  coSysScale 100 100 100
+                  children [
+                    DEF A3_CollisionSensor CollisionSensor {
+                      translation 86 0 10
+                      center 0 0 0
+                      size 350 250 300
+                    }
+                    # Axis 4 (A4) - X-axis rotation (wrist rotation)
+                    DEF A4 RobotJoint {
+                      jointName "A4"
+                      translation 173 0 20
+                      geometryUrl ["meshes-kuka/KR_4_R600_V01_X_T_3.wrl"]
+                      jointLength 173
+                      hasSensor TRUE
+                      minAngle -3.142
+                      maxAngle 3.142
+                      showCoSys TRUE
+                      coSysScale 100 100 100
+                      children [
+                        DEF A4_CollisionSensor CollisionSensor {
+                          translation 67 0 0
+                          center 0 0 0
+                          size 270 200 200
+                        }
+                        # Axis 5 (A5) - Y-axis rotation (wrist roll)
+                        DEF A5 RobotJoint {
+                          jointName "A5"
+                          translation 135.5 0 0
+                          geometryUrl ["meshes-kuka/KR_4_R600_V01_X_T_4.wrl"]
+                          geometryOffset 57.05 0 0
+                          jointLength 192.55
+                          hasSensor TRUE
+                          minAngle -2.007
+                          maxAngle 2.007
+                          showCoSys TRUE
+                          coSysScale 100 100 100
+                          children [
+                            DEF A5_CollisionSensor CollisionSensor {
+                              translation 96 0 0
+                              center 0 0 0
+                              size 250 180 180
+                            }
+                            # Axis 6 (A6) - End effector (no sensor)
+                            DEF A6 RobotJoint {
+                              jointName "A6"
+                              translation 57.06 0 0
+                              geometryUrl ["meshes-kuka/KR_4_R600_V01_X_T_5.wrl"]
+                              jointLength 0.01
+                              hasSensor TRUE
+                              minAngle -6.021
+                              maxAngle 6.021
+                              showCoSys TRUE
+                              coSysScale 100 100 100
+                              children [
+                                DEF AdapterFlange_TouchSensor TouchSensor { }
+                                DEF AdapterFlange AdapterFlanch2gripper {
+                                  translation 15.8 0 0
+                                  rotation 0 0 1 -1.5708
+                                  scale 1 1 1
+                                  children [
+                                    DEF Gripper_TouchSensor TouchSensor { }
+                                    DEF Gripper SchunkGripper {
+                                      translation 0 5 0.5
+                                      rotation 0 0 1 0
+                                      scale 1000 1000 1000
+                                    }
+                                  ]
+                                }
+                                DEF FINGER RobotJoint {
+                                  jointName "FINGER"
+                                  translation 100 11 0
+                                  rotation 0 1 0 1.5708
+                                  jointLength 0.01
+                                  hasSensor FALSE
+                                  minAngle -3.1415
+                                  maxAngle 3.1415
+                                  showCoSys TRUE
+                                  coSysScale 50 50 50
+                                  children [
+                                    DEF Finger1_CollisionSensor CollisionSensor {
+                                      translation 25 0 0
+                                      center 0 0 0
+                                      size 150 100 100
+                                    }
+                                    Transform {
+                                      scale 1000 1000 1000
+                                      children [
+                                        Collision {
+                                          collide TRUE
+                                          children [
+                                            Inline {
+                                              url ["meshes-kuka/prizmfinger.wrl"]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                                DEF FINGER2 RobotJoint {
+                                  jointName "FINGER2"
+                                  translation 100 -11 0
+                                  rotation 0 1 0 1.5708
+                                  jointLength 0.01
+                                  hasSensor FALSE
+                                  minAngle -3.1415
+                                  maxAngle 3.1415
+                                  showCoSys TRUE
+                                  coSysScale 50 50 50
+                                  children [
+                                    DEF Finger2_CollisionSensor CollisionSensor {
+                                      translation 25 0 0
+                                      center 0 0 0
+                                      size 150 100 100
+                                    }
+                                    Transform {
+                                      scale 1000 1000 1000
+                                      children [
+                                        Collision {
+                                          collide TRUE
+                                          children [
+                                            Inline {
+                                              url ["meshes-kuka/prizmfinger.wrl"]
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+ROUTE A1.rotation_changed TO A1_AxisConverter.rotation_in
+ROUTE A1_AxisConverter.rotation_out TO A1.set_rotation
+ROUTE A2.rotation_changed TO A2.set_rotation
+ROUTE A3.rotation_changed TO A3.set_rotation
+ROUTE A4.rotation_changed TO A4_AxisConverter.rotation_in
+ROUTE A4_AxisConverter.rotation_out TO A4.set_rotation
+ROUTE A5.rotation_changed TO A5.set_rotation
+ROUTE A6.rotation_changed TO A6_AxisConverter.rotation_in
+ROUTE A6_AxisConverter.rotation_out TO A6.set_rotation

@@ -120,37 +120,61 @@ function checkWorkspace(x,y,z){
 }
 
 // ── IKController ─────────────────────────────────────────────
+// Robot-agnostic router: picks FR3's own math (above, window.PandaIK) or
+// KukaIK.js's KukaIK module based on whichever robot PandaSliderControl
+// currently has active, so the "Solve IK" button, live TCP readout, and
+// LIN motion all work identically for either robot. Each robot module
+// exposes the same shape (getTCP, solveIK, checkWorkspace, getLinkPoints,
+// HOME, DEG/RAD), which is what makes this router possible without
+// per-robot branching anywhere else in the app.
 const IKController={
   _q:HOME.slice(),
   _raf:null,
 
+  _activeModule(){
+    const robot = (window.PandaSliderControl && window.PandaSliderControl.getActiveRobot) ?
+      window.PandaSliderControl.getActiveRobot() : 'fr3';
+    return robot === 'kuka' ? window.KukaIK : window.PandaIK;
+  },
+
   init(){
-    this._q=HOME.slice();
+    this._q=this._activeModule().HOME.slice();
     document.getElementById('moveToPose')?.addEventListener('click',()=>this.solve());
     document.getElementById('getCurrentTCP')?.addEventListener('click',()=>this.captureTCP());
     setInterval(()=>this._liveTCP(),150);
-    console.log('[FR3 IK] ready');
+    console.log('[IK] ready');
   },
 
   setSliderInstances(){},
 
+  // Called whenever the active robot changes (see the header switcher UI in
+  // index.html) so _q is re-seeded to the NEW robot's HOME instead of
+  // staying stale at the old robot's angle vector (which is the wrong
+  // length: 7 for FR3, 6 for KUKA).
+  onRobotChanged(){
+    this._q = this._activeModule().HOME.slice();
+  },
+
   addSliderListener(){
     window._pandaIKSliderCallback=(idx,deg)=>{
-      this._q[idx]=deg*DEG;
+      const mod = this._activeModule();
+      this._q[idx]=deg*mod.DEG;
     };
   },
 
   solve(){
+    const mod=this._activeModule();
+    const robot=(window.PandaSliderControl && window.PandaSliderControl.getActiveRobot) ? window.PandaSliderControl.getActiveRobot() : 'fr3';
     const x=parseFloat(document.getElementById('X')?.value||0);
     const y=parseFloat(document.getElementById('Y')?.value||0);
     const z=parseFloat(document.getElementById('Z')?.value||400);
-    const ws=checkWorkspace(x,y,z);
+    const ws=mod.checkWorkspace(x,y,z);
     if(!ws.valid){this._status('⚠ '+ws.errors.join(' | '),'warn');return{success:false,blocked:'workspace'};}
     this._status('Solving…','');
-    const res=solveIK([x,y,z],this._q);
+    const res=mod.solveIK([x,y,z],this._q);
 
     if (typeof window.PandaSafety !== 'undefined') {
-      const safety = window.PandaSafety.checkSafety(res.angles);
+      const safety = window.PandaSafety.checkSafety(res.angles, robot);
       if (!safety.safe) {
         const reason = safety.groundViolation ? 'would go below ground' : 'self-collision risk';
         const detail = safety.details[0] ? ' — '+safety.details[0] : '';
@@ -167,11 +191,13 @@ const IKController={
 
   _run(traj,final){
     if(this._raf)cancelAnimationFrame(this._raf);
+    const mod=this._activeModule();
+    const cfg=window.PandaSliderControl.JOINT_CONFIG; // ordered names for the ACTIVE robot
     let i=0;
     const step=()=>{
       if(i>=traj.length){this._q=final.slice();return;}
       const map={};
-      traj[i++].forEach((v,j)=>{map[`joint${j+1}`]=v*RAD;});
+      traj[i++].forEach((v,j)=>{ if(cfg[j]) map[cfg[j].name]=v*mod.RAD; });
       PandaSliderControl.loadAllAngles(map,false);
       this._raf=requestAnimationFrame(step);
     };
@@ -179,7 +205,8 @@ const IKController={
   },
 
   captureTCP(){
-    const tcp=getTCP(this._q);
+    const mod=this._activeModule();
+    const tcp=mod.getTCP(this._q);
     document.getElementById('X').value=tcp[0].toFixed(1);
     document.getElementById('Y').value=tcp[1].toFixed(1);
     document.getElementById('Z').value=tcp[2].toFixed(1);
@@ -187,7 +214,8 @@ const IKController={
   },
 
   _liveTCP(){
-    const tcp=getTCP(this._q);
+    const mod=this._activeModule();
+    const tcp=mod.getTCP(this._q);
     const xEl=document.getElementById('tcpX');
     const yEl=document.getElementById('tcpY');
     const zEl=document.getElementById('tcpZ');

@@ -1,5 +1,5 @@
 /**
- * FR3 Digital Twin — Safety Checking
+ * Digital Twin — Safety Checking
  * Approximates each link as a capsule (line segment + radius) and checks:
  *   1) Ground-plane violation — any link point below the base mounting plane
  *   2) Self-collision — two non-adjacent links passing within LINK collision
@@ -8,36 +8,69 @@
  * normal reachable poses (including HOME) don't false-positive. It's meant
  * to catch genuine "arm folding into itself" or "arm through the floor"
  * cases, not to be a certified collision engine.
+ *
+ * Supports multiple robots (FR3, KUKA KR4R600) via a per-robot PROFILES
+ * table — checkSafety(qRad, robotKey) picks the right link-point source
+ * (window.PandaIK vs window.KukaIK) and the right calibration constants.
+ * The FR3 profile's constants were calibrated against known-safe/known-bad
+ * test poses (see comments below). The KUKA profile is a conservative
+ * estimate based on that robot's actual link lengths/geometry (it's a
+ * heavier industrial arm than the FR3, hence larger clearances) rather
+ * than pose-by-pose calibration — flagged here so it's not mistaken for
+ * being equally validated.
  */
 (function () {
   'use strict';
 
-  const GROUND_Z = 0;          // base mounting plane, mm (matches CHAIN's z=0 origin)
-  const GROUND_CLEARANCE = 5;  // mm — stop this far ABOVE the plane, before contact.
-                                // (Previously this was applied as tolerance BELOW the
-                                // plane, which let the arm dip 15mm underground before
-                                // flagging — backwards. Now it blocks approaching within
-                                // 5mm of z=0, so the arm never actually reaches the floor.)
-  const MERGE_THRESHOLD = 30;  // mm — several FR3 joints share the same physical
-                                // location (zero-offset rotation axes, e.g. the
-                                // wrist cluster), so raw per-joint points produce
-                                // degenerate zero-length "links". Collapsing points
-                                // closer than this turns the 9 DH points into ~6-7
-                                // segments that actually correspond to physical links.
-  const COLLISION_DIST = 35;   // mm, min center-line distance between non-adjacent
-                                // physical links — calibrated against HOME (82mm),
-                                // a fully extended pose (63mm) and known-folded test
-                                // poses (0mm) so normal reachable poses don't false-positive.
-  const BASE_COLLISION_DIST = 60; // mm — segment 0 (see checkSafety) is always the
-                                // fixed base/pedestal column, which is physically much
-                                // bulkier than the slender arm links. The blanket 35mm
-                                // radius is sized for arm-to-arm gaps and is too thin
-                                // for it: J3 at its limit with J4 near -176° folds the
-                                // hand to 36mm from the base — just over 35mm, so it
-                                // was reported "safe" while visually clipping through
-                                // the pedestal. Verified against known-safe poses (min
-                                // observed base clearance ~91mm) vs this known-bad one
-                                // (36mm), so 60mm sits cleanly between the two.
+  const PROFILES = {
+    fr3: {
+      getLinkPoints: qRad => window.PandaIK.getLinkPoints(qRad),
+      GROUND_Z: 0,              // base mounting plane, mm (matches CHAIN's z=0 origin)
+      GROUND_CLEARANCE: 5,      // mm — stop this far ABOVE the plane, before contact.
+                                 // (Previously this was applied as tolerance BELOW the
+                                 // plane, which let the arm dip 15mm underground before
+                                 // flagging — backwards. Now it blocks approaching within
+                                 // 5mm of z=0, so the arm never actually reaches the floor.)
+      MERGE_THRESHOLD: 30,      // mm — several FR3 joints share the same physical
+                                 // location (zero-offset rotation axes, e.g. the
+                                 // wrist cluster), so raw per-joint points produce
+                                 // degenerate zero-length "links". Collapsing points
+                                 // closer than this turns the 9 DH points into ~6-7
+                                 // segments that actually correspond to physical links.
+      COLLISION_DIST: 35,       // mm, min center-line distance between non-adjacent
+                                 // physical links — calibrated against HOME (82mm),
+                                 // a fully extended pose (63mm) and known-folded test
+                                 // poses (0mm) so normal reachable poses don't false-positive.
+      BASE_COLLISION_DIST: 60,  // mm — segment 0 is always the fixed base/pedestal
+                                 // column, physically bulkier than the slender arm
+                                 // links. Verified against known-safe poses (min
+                                 // observed base clearance ~91mm) vs a known-bad one
+                                 // (36mm), so 60mm sits cleanly between the two.
+    },
+    kuka: {
+      getLinkPoints: qRad => window.KukaIK.getLinkPoints(qRad),
+      // kuka.wrl's robot root Transform (and GroundPlane) both sit at
+      // world z=-400 (see kuka.wrl comments), so "ground" for link points
+      // returned in that same world frame is z=-400, not 0.
+      GROUND_Z: -400,
+      GROUND_CLEARANCE: 5,
+      MERGE_THRESHOLD: 30,
+      // NOTE — this profile is a rough estimate, not pose-calibrated
+      // against known-safe/known-bad test poses the way the FR3 profile
+      // above was. At A1=0 the KR4R600's whole chain lies in a single
+      // vertical plane through the base, so its HOME pose legitimately
+      // brings several non-adjacent links within ~20-30mm of the base's
+      // own vertical column in this simplified point-capsule model — not
+      // a real collision, just a side effect of approximating a bulky
+      // industrial base as a zero-radius line. BASE_COLLISION_DIST is
+      // therefore left at 0 (i.e. base-vs-arm checks disabled) until this
+      // can be validated against real known-bad poses; arm-to-arm checks
+      // stay on with a tighter distance to still catch genuine self-folds.
+      COLLISION_DIST: 15,
+      BASE_COLLISION_DIST: 0,
+    },
+  };
+
   const SKIP_CHAIN_DISTANCE = 1; // ignore segment pairs that are directly adjacent
                                   // after merging (they share a joint)
 
@@ -86,33 +119,37 @@
   }
 
   /**
-   * qRad: array of 7 joint angles in radians (same order as PandaIK expects).
+   * qRad: array of joint angles in radians (7 for FR3, 6 for KUKA — same
+   * order each robot's IK module expects).
+   * robotKey: 'fr3' (default) or 'kuka' — selects which link-point source
+   * and calibration profile (PROFILES above) to use.
    * Returns { safe, groundViolation, selfCollision, minZ, details[] }
    */
-  function checkSafety(qRad) {
+  function checkSafety(qRad, robotKey) {
+    const profile = PROFILES[robotKey] || PROFILES.fr3;
     const details = [];
-    const rawPts = window.PandaIK.getLinkPoints(qRad);
+    const rawPts = profile.getLinkPoints(qRad);
 
-    // rawPts[0] is the fixed base/mounting point — it sits AT z=0 by
-    // definition, not a link that can move into the floor, so it's excluded
-    // from the ground check (otherwise a 5mm clearance would flag every pose).
+    // rawPts[0] is the fixed base/mounting point — not a link that can move
+    // into the floor, so it's excluded from the ground check (otherwise a
+    // 5mm clearance would flag every pose).
     let minZ = Infinity;
     rawPts.slice(1).forEach(p => { if (p[2] < minZ) minZ = p[2]; });
-    const groundViolation = minZ < GROUND_Z + GROUND_CLEARANCE;
-    if (groundViolation) details.push(`link point at z=${minZ.toFixed(0)}mm is within ${GROUND_CLEARANCE}mm of the ground plane`);
+    const groundViolation = minZ < profile.GROUND_Z + profile.GROUND_CLEARANCE;
+    if (groundViolation) details.push(`link point at z=${minZ.toFixed(0)}mm is within ${profile.GROUND_CLEARANCE}mm of the ground plane`);
 
-    const pts = mergePoints(rawPts, MERGE_THRESHOLD);
+    const pts = mergePoints(rawPts, profile.MERGE_THRESHOLD);
     let selfCollision = false;
     const n = pts.length - 1; // number of merged (physical) link segments
-    // pts[0]->pts[1] (segment index 0) is always the base->joint1 column: raw
-    // point 0 is the fixed origin and raw point 1 sits directly above it on
-    // the Z axis regardless of joint1's rotation (rotating about a point on
-    // its own axis doesn't move it), so this segment reliably represents the
-    // physical base/pedestal in every pose — safe to special-case by index.
+    // pts[0]->pts[1] (segment index 0) is always the base->first-joint column:
+    // raw point 0 is the fixed origin and raw point 1 sits directly above it
+    // regardless of joint1's rotation (rotating about a point on its own axis
+    // doesn't move it), so this segment reliably represents the physical
+    // base/pedestal in every pose — safe to special-case by index.
     for (let i = 0; i < n; i++) {
       for (let j = i + 1; j < n; j++) {
         if (j - i <= SKIP_CHAIN_DISTANCE) continue;
-        const limit = (i === 0 || j === 0) ? BASE_COLLISION_DIST : COLLISION_DIST;
+        const limit = (i === 0 || j === 0) ? profile.BASE_COLLISION_DIST : profile.COLLISION_DIST;
         const d = segSegDist(pts[i], pts[i + 1], pts[j], pts[j + 1]);
         if (d < limit) {
           selfCollision = true;
@@ -124,5 +161,5 @@
     return { safe: !groundViolation && !selfCollision, groundViolation, selfCollision, minZ, details };
   }
 
-  window.PandaSafety = { checkSafety, GROUND_Z, GROUND_CLEARANCE, COLLISION_DIST, BASE_COLLISION_DIST };
+  window.PandaSafety = { checkSafety, PROFILES };
 })();

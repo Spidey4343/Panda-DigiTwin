@@ -113,8 +113,8 @@ body {
 .header-title { font-size: 14px; font-weight: 600; letter-spacing: -0.2px; color: var(--text); }
 .header-sub   { font-size: 11px; color: var(--sub); }
 
-/* TCP bar in header center */
-.header-center { flex: 1; display: flex; justify-content: center; }
+/* TCP bar + robot switcher in header center */
+.header-center { flex: 1; display: flex; align-items: center; justify-content: center; gap: 12px; }
 .tcp-bar {
   display: flex; align-items: center; gap: 6px;
   background: var(--accent-l); border: 1px solid #c9dcfc;
@@ -125,6 +125,36 @@ body {
   text-transform: uppercase; letter-spacing: 0.8px; }
 .tcp-val   { font-weight: 600; color: var(--accent-dk); min-width: 42px; text-align: right; }
 .tcp-unit  { color: var(--muted); font-size: 10px; }
+
+/* Robot switcher — glossy segmented control, same language as .tab-bar */
+.robot-switch {
+  display: flex; gap: 3px;
+  background: linear-gradient(180deg, #ffffff, var(--surface2));
+  border: 1px solid var(--border);
+  border-radius: 20px; padding: 3px;
+  box-shadow: var(--shadow-sm);
+}
+.robot-switch-btn {
+  background: none; border: none;
+  border-radius: 17px; color: var(--sub);
+  font-size: 11px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.2px; padding: 6px 14px; cursor: pointer;
+  transition: all 0.15s;
+}
+.robot-switch-btn:hover { color: var(--text); background: rgba(0,0,0,0.03); }
+.robot-switch-btn.active {
+  background: linear-gradient(180deg, #5b9bff 0%, #2f7dfd 50%, #1b5fd1 100%);
+  color: #fff;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset, 0 3px 8px -1px rgba(47,125,253,0.5);
+  position: relative; overflow: hidden;
+}
+.robot-switch-btn.active::before {
+  content: '';
+  position: absolute; top: 1px; left: 2px; right: 2px; height: 46%;
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.6), rgba(255,255,255,0));
+  pointer-events: none;
+}
 
 .header-right { display: flex; align-items: center; gap: 10px; }
 
