@@ -4,10 +4,21 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>FR3 Digital Twin — PFH</title>
+  <!-- Empty data-URI favicon: avoids the browser auto-requesting
+       /favicon.ico (which 404s, since none was ever added) and showing up
+       as console noise. -->
+  <link rel="icon" href="data:,"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="https://create3000.github.io/code/x_ite/latest/x_ite.css"/>
-  <script src="https://create3000.github.io/code/x_ite/latest/x_ite.min.js"></script>
+  <!-- X_ITE, pinned via jsDelivr rather than the create3000.github.io/latest
+       path — Prof. Avgustinov flagged that path as discouraged (it serves
+       whatever's on the repo's gh-pages HEAD, not a stable release) in
+       favor of the versioned npm build jsDelivr serves. This also lines up
+       with large .wrl mesh files (link0/5/6/7, 1-7MB) failing to load in
+       Firefox specifically while working in Chrome — worth confirming this
+       resolves it, since the old path wasn't a pinned, tested release. -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/x_ite@15.1.12/dist/x_ite.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/x_ite@15.1.12/dist/x_ite.min.js"></script>
   <!-- ?v=N cache-busts these against GitHub Pages/browser caching (bit us
        twice: an updated .js deployed fine but browsers kept serving the old
        cached copy for minutes after). Bump N whenever any of these change. -->
