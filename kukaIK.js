@@ -631,11 +631,17 @@
         return pts;
     }
 
-    // solveIK(targetXYZ, q0Rad) — matches PandaIK.solveIK's return shape:
-    // { angles, error, tcp, trajectory, success }, angles/trajectory in
-    // radians ordered [A1..A6], so IKController.solve() in index.html can
-    // call whichever robot's solver identically.
-    function solveIK(targetXYZ, q0Rad) {
+    // solveIK(targetXYZ, q0Rad, targetRPYRad?) — matches PandaIK.solveIK's
+    // return shape: { angles, error, tcp, trajectory, success }, angles/
+    // trajectory in radians ordered [A1..A6], so IKController.solve() in
+    // index.html can call whichever robot's solver identically.
+    //
+    // targetRPYRad, if given, is [roll,pitch,yaw] in RADIANS (used by the
+    // orientation "Apply" button). Sanath's original solver above already
+    // accepts a targetOrientation and solves for it (calculateJacobian
+    // already includes the orientation rows) — this just threads the
+    // value through; no changes were needed to his solver itself.
+    function solveIK(targetXYZ, q0Rad, targetRPYRad) {
         const target = { x: targetXYZ[0], y: targetXYZ[1], z: targetXYZ[2] };
         const q0 = q0Rad ? arrToAngles(q0Rad) : null;
         if (q0) window.IKSolver.currentJointAngles = q0;
@@ -645,19 +651,33 @@
             return { angles: q0Rad || anglesToArr(window.IKSolver.currentJointAngles), error: Infinity, tcp: target, trajectory: [], success: false, workspaceError: ws.reason };
         }
 
-        const res = window.IKSolver.solveIK(target);
+        const targetOrientation = targetRPYRad
+            ? { roll: targetRPYRad[0], pitch: targetRPYRad[1], yaw: targetRPYRad[2] }
+            : null;
+        const res = window.IKSolver.solveIK(target, targetOrientation);
         if (!res) {
             return { angles: q0Rad || anglesToArr(window.IKSolver.currentJointAngles), error: Infinity, tcp: target, trajectory: [], success: false };
         }
 
         window.IKSolver.setJointAngles(res.finalAngles);
 
+        let orientationError;
+        if (targetOrientation) {
+            const cur = window.IKSolver.forwardKinematics(res.finalAngles).orientation;
+            orientationError = Math.sqrt(
+                (targetOrientation.roll - cur.roll) ** 2 +
+                (targetOrientation.pitch - cur.pitch) ** 2 +
+                (targetOrientation.yaw - cur.yaw) ** 2
+            );
+        }
+
         return {
             angles: anglesToArr(res.finalAngles),
             error: res.finalError,
+            orientationError,
             tcp: [res.tcp.x, res.tcp.y, res.tcp.z],
             trajectory: res.trajectory.map(anglesToArr),
-            success: res.finalError < 20,
+            success: res.finalError < 20 && (orientationError === undefined || orientationError < 0.09),
         };
     }
 
