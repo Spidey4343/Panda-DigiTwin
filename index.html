@@ -22,11 +22,11 @@
   <!-- ?v=N cache-busts these against GitHub Pages/browser caching (bit us
        twice: an updated .js deployed fine but browsers kept serving the old
        cached copy for minutes after). Bump N whenever any of these change. -->
-  <script src="pandaIK.js?v=5"></script>
-  <script src="kukaIK.js?v=5"></script>
-  <script src="pandaSafety.js?v=5"></script>
-  <script src="pandaSliders.js?v=5"></script>
-  <script src="pandaKRL.js?v=5"></script>
+  <script src="pandaIK.js?v=6"></script>
+  <script src="kukaIK.js?v=6"></script>
+  <script src="pandaSafety.js?v=6"></script>
+  <script src="pandaSliders.js?v=6"></script>
+  <script src="pandaKRL.js?v=6"></script>
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
@@ -224,6 +224,13 @@
             <span class="panel-title">Program Editor</span>
             <span class="panel-tag new-tag">NEW · KRL</span>
           </div>
+          <div class="config-row">
+            <label class="field-label" for="backendSelect">Backend</label>
+            <select class="select-sm flex1" id="backendSelect">
+              <option value="js">JS / Live 3D (default)</option>
+              <option value="sim">Simulated (INT-02 demo — virtual only)</option>
+            </select>
+          </div>
           <textarea class="krl-editor" id="krlProgram" spellcheck="false">DECL INT i = 0
 WHILE i < 3
   LIN {X 300 Y 0 Z 500}
@@ -377,6 +384,7 @@ async function parseKRL(cmd) {
   if (!cmd.trim()) return;
   termLog(cmd, 'cmd');
   try {
+    KRLEngine.backends.sim.setLogger(termLog); // no-op unless sim backend is active (INT-02)
     const ir = KRLEngine.parseProgram(cmd);
     await KRLEngine.KRLInterpreter.run(ir, {
       backend: KRLEngine.getBackend(),
@@ -405,6 +413,7 @@ async function runKRLProgram() {
   document.getElementById('progHistory').innerHTML = '';
   const text = document.getElementById('krlProgram').value;
   try {
+    KRLEngine.backends.sim.setLogger(progLog); // no-op unless sim backend is active (INT-02)
     const ir = KRLEngine.parseProgram(text);
     await KRLEngine.KRLInterpreter.run(ir, {
       backend: KRLEngine.getBackend(),
@@ -639,6 +648,15 @@ window.addEventListener('load', () => {
   document.getElementById('stopProgram').onclick = () => {
     KRLEngine.KRLInterpreter.stop();
     progLog('Stop requested', 'warn');
+  };
+
+  // Backend switcher (INT-02): swaps which backend the SAME parsed KRL
+  // program executes against, no changes to parser/dispatcher/interpreter.
+  document.getElementById('backendSelect').onchange = (e) => {
+    KRLEngine.setBackend(e.target.value);
+    progLog(e.target.value === 'sim'
+      ? 'Switched to SIMULATED backend — motion will be virtual only, no 3D movement (INT-02 demo)'
+      : 'Switched to JS backend — driving the live 3D twin', 'warn');
   };
 
   // Variables + I/O panels

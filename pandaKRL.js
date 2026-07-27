@@ -294,14 +294,60 @@
     },
   };
 
+  // ── Simulated Backend (INT-02) ───────────────────────────────
+  // A second, fully independent backend implementing the exact same
+  // 4-call API as JSBackend (move_ptp, move_lin, wait, set_output).
+  // This is what actually proves INT-01's "backend-agnostic" claim and
+  // closes INT-02: the same KRL program, completely unmodified, runs
+  // correctly against either backend once KRLEngine.setBackend() swaps
+  // the target. Instead of driving the live 3D twin, it tracks a
+  // virtual robot's angles/TCP purely in numbers and reports each move
+  // through an optional logger — no 3D scene, no DOM, no safety layer
+  // involved, so switching to it is a visible, honest "nothing moves,
+  // but the log proves every instruction still executed" demo.
+  const SimBackend = (function () {
+    let simAngles = {};
+    let simTCP = { x: 0, y: 0, z: 0 };
+    let simOut = new Array(9).fill(false);
+    let logger = null;
+
+    return {
+      setLogger(fn) { logger = typeof fn === 'function' ? fn : null; },
+      async move_ptp(anglesMap) {
+        Object.entries(anglesMap).forEach(([k, v]) => { simAngles[k] = v; });
+        if (logger) logger(`[SIM backend] PTP → ${JSON.stringify(anglesMap)} (virtual only, no 3D motion)`, '');
+        return new Promise(resolve => setTimeout(resolve, 150));
+      },
+      async move_lin({ x, y, z }) {
+        if (x != null) simTCP.x = x;
+        if (y != null) simTCP.y = y;
+        if (z != null) simTCP.z = z;
+        if (logger) logger(`[SIM backend] LIN → [${simTCP.x}, ${simTCP.y}, ${simTCP.z}] (virtual only)`, '');
+        return new Promise(resolve => setTimeout(resolve, 150));
+      },
+      async wait(ms) {
+        return new Promise(resolve => setTimeout(resolve, Math.max(0, ms)));
+      },
+      set_output(index, value) {
+        simOut[index] = !!value;
+        if (logger) logger(`[SIM backend] $OUT[${index}] = ${!!value}`, '');
+      },
+      get_input(index) {
+        return KRLInterpreter.getScope().IN[index] || false;
+      },
+      getState: () => ({ angles: { ...simAngles }, tcp: { ...simTCP }, out: simOut.slice() }),
+    };
+  })();
+
   let activeBackend = JSBackend;
 
   window.KRLEngine = {
     parseProgram,
     evalExpr,
     KRLInterpreter,
-    backends: { js: JSBackend },
+    backends: { js: JSBackend, sim: SimBackend },
     getBackend: () => activeBackend,
+    getBackendName: () => (activeBackend === JSBackend ? 'js' : 'sim'),
     setBackend: (nameOrObj) => {
       activeBackend = typeof nameOrObj === 'string' ? window.KRLEngine.backends[nameOrObj] : nameOrObj;
     },
